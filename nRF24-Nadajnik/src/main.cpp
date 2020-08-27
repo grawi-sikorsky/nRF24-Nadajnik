@@ -6,6 +6,7 @@
 * 
 * Library: TMRh20/RF24, https://github.com/tmrh20/RF24/
 */
+/*
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
@@ -22,7 +23,7 @@ int data = 100;
 
 void setup() {
   //bme1.beginSPI(8);
-  //Serial.begin(9600);
+  Serial.begin(9600);
   radio.begin();
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_LOW);
@@ -31,7 +32,7 @@ void setup() {
 
 void loop() {
   //bme_data = bme1.readFixedPressure();  // Odczyt z czujnika bme
-  //Serial.println(bme_data);
+  Serial.println(data);
   //bme1.end();
 
   const char text[] = "0101010101";
@@ -42,4 +43,22 @@ void loop() {
   //radio.stopListening();
   radio.write(&data, sizeof(data));
   delay(1000);
+}*/
+
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+RF24 radio(9, 10); // CE, CSN
+const byte address[13] = "111000111000";
+void setup() {
+  radio.begin();
+  radio.openWritingPipe(address);
+  radio.setPALevel(RF24_PA_LOW);
+  radio.stopListening();
+}
+int data=100;
+void loop() {
+  data++;
+  radio.write(&data, sizeof(data));
+  delay(1);
 }
