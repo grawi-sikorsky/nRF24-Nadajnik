@@ -16,6 +16,15 @@
 #define TRANSMISION_PIN 0 // 4 w proto
 #define USER_SWITCH     2 // PD2 INT0
 
+#define SWITCH_TIMEOUT  3000          // czas przycisku nacisniecia
+#define SW_RST_TIMEOUT  100          // czas w ktorym należy wykonac klikniecia dla RST
+#define SW_RST_COUNT    5             // ilosc nacisniec do wykonania resetu
+#define TIME_TO_WAIT_MS 50            // czas do nastepnego wyzwolenia????
+#define TIMEOUT_1       72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
+#define TIMEOUT_2       144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
+
+#define DEBUGMODE
+
 // BME280 LIB
 #define TINY_BME280_SPI
 #include "TinyBME280.h"
@@ -33,12 +42,14 @@ RF24 radio(9, 10); // CE, CSN
 const byte address[17] = "1100110011001100";
 int data = 0;
 
-time_t btn_current, btn_pressed_at, btn_timeout;
+period_t sleeptime;
+time_t current_time, last_time;
+time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
 bool btn_state = LOW;
 bool btn_last_state = LOW;
 int btn_rst_counter = 0;
 
-bool device_is_off = false;
+bool device_in_longsleep = false;
 bool delegate_to_longsleep = false;
 
 
@@ -47,14 +58,15 @@ bool delegate_to_longsleep = false;
  * ***************************************************/
 void ButtonPressed()
 {
-  if(device_is_off == true)  // jesli urzadzenie jest wylaczone
-  { 
-    btn_pressed_at = millis();
+  if(device_in_longsleep == true)  // jesli urzadzenie jest wylaczone
+  {
+    btn_pressed_time = millis();
 
     // wlacz i przejdz do sprawdzenia stanu przycisku
     uc_state = UC_BTN_CHECK;
   }
 }
+
 /*****************************************************
  * Przerwanie dla przycisku
  * ***************************************************/
@@ -75,7 +87,7 @@ void prepareToSleep()
   power_adc_disable(); // ADC converter
   power_spi_disable(); // SPI
   #ifdef DEBUGMODE
-    power_usart0_disable();// Serial (USART) test
+    power_usart0_enable();// Serial (USART) test
   #else
     power_usart0_disable();
   #endif
@@ -96,9 +108,31 @@ void softReset(){
   while(1); //loop
 }
 
+void checkTimeout()
+{
+  //current_positive = millis();  // pobierz czas.
+  current_time = millis();
+
+  //current_time = current_time - last_time;
+
+  if(current_time > TIME_TO_WAIT_MS && current_time < TIMEOUT_1) // pierwszy prog
+  {
+    sleeptime = SLEEP_120MS;
+  }
+  else if(current_time > TIMEOUT_1 && current_time < TIMEOUT_2) // drugi prog
+  {
+    // zmniejsz probkowanie 2x/s
+    sleeptime = SLEEP_500MS; // 1S
+  }
+  else if(current_time > TIMEOUT_2 )
+  {
+    delegate_to_longsleep = true;
+    device_in_longsleep = true;
+  }
+}
 
 void setup() {
-  clock_prescale_set(clock_div_1);
+  //clock_prescale_set(clock_div_1);
   
   // wylacz WDT
   MCUSR= 0 ;
@@ -108,26 +142,32 @@ void setup() {
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
   power_adc_disable(); // ADC converter
   //power_spi_disable(); // SPI
-  power_usart0_disable();// Serial (USART)
+  #ifdef DEBUGMODE
+    power_usart0_enable();// Serial (USART) test
+  #else
+    power_usart0_disable();
+  #endif
   //power_timer0_disable();// TIMER 0 SLEEP WDT ...
   power_timer1_disable();// Timer 1 - I2C...
   power_timer2_disable();// Timer 2
 
   PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
 
+/*
   for (byte i = 0; i <= A5; i++)
   {
     pinModeFast(i, OUTPUT);    // changed as per below
     digitalWriteFast(i, LOW);  //     ditto
   }
+*/
 
-  //pinModeFast(LED_PIN,OUTPUT);
-  //pinModeFast(SPEAKER_PIN,OUTPUT);
-  //pinModeFast(TRANSMISION_PIN,OUTPUT);
-  //pinModeFast(USER_SWITCH,INPUT);
-  //digitalWriteFast(LED_PIN, LOW);  // LED OFF
-  //digitalWriteFast(SPEAKER_PIN, LOW);    // SPK
-  //digitalWriteFast(TRANSMISION_PIN, LOW);    // RF433
+  pinModeFast(LED_PIN,OUTPUT);
+  pinModeFast(SPEAKER_PIN,OUTPUT);
+  pinModeFast(TRANSMISION_PIN,OUTPUT);
+  pinModeFast(USER_SWITCH,INPUT);
+  digitalWriteFast(LED_PIN, LOW);  // LED OFF
+  digitalWriteFast(SPEAKER_PIN, LOW);    // SPK
+  digitalWriteFast(TRANSMISION_PIN, LOW);    // RF433
 
   pinModeFast(SS,OUTPUT);
   pinModeFast(MOSI,OUTPUT);
@@ -138,19 +178,10 @@ void setup() {
   digitalWriteFast(MISO,HIGH);
   digitalWriteFast(SCK,HIGH);
 
-  power_timer1_enable();  // Timer 1 - I2C...        
-  //readValues();               // pierwsze pobranie wartosci - populacja zmiennych
-  //prev_press = press_odczyt; // jednorazowe na poczatku w setup
-  //setupTimer1();              // Ustawia timer1
-  power_timer1_disable(); // Timer 1 - I2C...
-
-  //makeMsg();                  // Przygotowuje ramke danych
 
   //last_blink = millis();
 
-  //startup = false;
-  //was_whistled = false;
-  //uc_state = UC_GO_SLEEP; // default uC state
+  uc_state = UC_GO_SLEEP; // default uC state
 
 
   bme1.beginSPI(8);
@@ -168,37 +199,135 @@ void loop() {
     {
       if (delegate_to_longsleep == true)  // dluga kima
       {
+        //Serial.println("deepsleep"); delayMicroseconds(950);
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         attachInterrupt(digitalPinToInterrupt(2), ISR_INT0_vect, RISING); // przerwanie sw
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
       }
       else    // krotka kima
       {
+        Serial.println("sleep"); delayMicroseconds(550);
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(SLEEP_120MS,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(SLEEP_250MS,ADC_OFF,BOD_OFF);
         interrupts();
-        uc_state = UC_WAKE_AND_CHECK; // pokima�? to sprawdzi� co sie dzieje->
+        uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
       }
-      
       break;
     }
     case UC_WAKE_AND_CHECK:
     {
+      power_spi_enable(); // SPI
+      
+      bme_data = bme1.readFixedPressure();        // Odczyt z czujnika bme
+      radio.write(&bme_data, sizeof(bme_data));   // Wyslij dane przez nRF
+      //Serial.print("BME nadano:");                // debug
+      //Serial.println(bme_data);                   // debug
 
+      uc_state = UC_BTN_CHECK;
       break;
     }
     case UC_BTN_CHECK:
     {
+      btn_last_state = btn_state;               // do rst
+      btn_state = digitalReadFast(USER_SWITCH); // odczyt stanu guzika
+      
+      current_time = millis();
+
+      if(btn_state != btn_last_state) // jezeli stan przycisku sie zmienil
+      {
+        if(btn_state == HIGH)         // jezeli jest wysoki
+        {
+          btn_rst_counter++;          // licznik klikniec ++
+          last_rst_click = current_time;  // zeruj timeout
+        }
+        if(current_time - last_rst_click >= SW_RST_TIMEOUT)
+        {
+          btn_rst_counter = 0;
+          last_rst_click = current_time;
+        }
+        if(btn_rst_counter >= SW_RST_COUNT)
+        {
+          for(int i=0; i<20; i++)
+          {
+            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+            delay(100);
+          }
+          softReset();
+        }
+      }
+
+      // jesli przycisk nie jest wcisniety lub zostal zwolniony
+      if(btn_state == LOW)
+      {
+        btn_pressed_time = current_time; // ustaw obecny czas
+        // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
+      }
+
+      // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
+      if(btn_state == LOW && device_in_longsleep == false)
+      {
+        btn_pressed_time = current_time; // to wlasciwie mozna usunac na rzecz tego na gorze?
+        // i od razu w krotka kime
+        uc_state = UC_GO_SLEEP;
+        break;
+      }
+
+      // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
+      if(btn_state == LOW && device_in_longsleep == true)
+      {
+        device_in_longsleep = true;           // flaga off dla pewnosci
+        delegate_to_longsleep = true;   // deleguj do glebokiego snu
+        uc_state = UC_GO_SLEEP;
+      }
+
+      // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
+      if(btn_state == HIGH && device_in_longsleep == true) // jesli guzik + nadajnik off
+      {
+        if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
+        {
+          // pobudka
+          btn_pressed_time = current_time;
+          digitalWriteFast(LED_PIN,HIGH);
+          delay(1000);
+          digitalWriteFast(LED_PIN,LOW);
+
+          device_in_longsleep = false;
+
+          // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
+          // dlatego last positive = teraz
+          // last_positive = current_time; 
+
+          detachInterrupt(digitalPinToInterrupt(2));
+          uc_state = UC_WAKE_AND_CHECK;
+        }
+        //uc_state = UC_GO_SLEEP;// nowe - przemyslec!
+      }
+
+      // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
+      else if(btn_state == true && device_in_longsleep == false) // guzik + nadajnik ON
+      {
+        if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
+        {
+          // spij
+          device_in_longsleep = true;
+          delegate_to_longsleep = true;          
+          digitalWriteFast(LED_PIN,HIGH);
+          delay(400);
+          digitalWriteFast(LED_PIN,LOW);
+          delay(400);
+          digitalWriteFast(LED_PIN,HIGH);
+          delay(400);
+          digitalWriteFast(LED_PIN,LOW);
+          uc_state = UC_GO_SLEEP;
+        }
+      }
+      else
+      {
+        // yyyyy...
+      }
 
       break;
     }
   }
-  bme_data = bme1.readFixedPressure();  // Odczyt z czujnika bme
-  Serial.print("BME nadano:");
-  Serial.println(bme_data);
-
-
-
-  radio.write(&bme_data, sizeof(bme_data));
-  delay(200);
+  checkTimeout();
 }
