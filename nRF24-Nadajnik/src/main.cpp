@@ -23,24 +23,40 @@
 #define TIMEOUT_1       72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
 #define TIMEOUT_2       144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
 
-#define DEBUGMODE
+#define RF_SENDBACK     25          // ilosc transmisji nadawczych do odbioru powrotnej (musi byc identyczna z Odbiornikiem!)
+
+//#define DEBUGMODE
 
 // BME280 LIB
 #define TINY_BME280_SPI
 #include "TinyBME280.h"
 tiny::BME280 bme1; //Uses I2C address 0x76 (jumper closed)
-float bme_data;
+
+struct outdata
+{
+  float bme_data;   // cisnienie z nadajnika
+  int   i_send;      // licznik z nadajnika
+  bool  slowtime;   // zwolnij odswiezanie
+  bool  sleeptime;  // uspij nadajnik
+  bool  reset;
+};
+outdata nrfdata;
+
+//float bme_data;
 
 enum uc_State {
   UC_GO_SLEEP = 0,
   UC_WAKE_AND_CHECK = 1,
-  UC_BTN_CHECK  = 2,
+  UC_WAITING_FOR_SENDBACK = 2,
+  UC_BTN_CHECK  = 3,
 };
 uc_State uc_state;
 
 RF24 radio(9, 10); // CE, CSN
 const byte address[17] = "1100110011001100";
-int data = 0;
+int i_receive = 0;
+int received_state;
+bool transmit_done;
 
 period_t sleeptime;
 time_t current_time, last_time;
@@ -63,7 +79,7 @@ void ButtonPressed()
     btn_pressed_time = millis();
 
     // wlacz i przejdz do sprawdzenia stanu przycisku
-    uc_state = UC_BTN_CHECK;
+    //uc_state = UC_BTN_CHECK;
   }
 }
 
@@ -96,6 +112,8 @@ void prepareToSleep()
   power_timer2_disable();// Timer 2
 
   PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
+
+  //radio.powerDown();
 }
 
 /*****************************************************
@@ -108,27 +126,63 @@ void softReset(){
   while(1); //loop
 }
 
-void checkTimeout()
+/*********************************************************************
+ * PO ODEBRANIU INFO Z ODBIORNIKA USTAWIA CZAS PROBKOWANIA I SPANIA
+ * *******************************************************************/
+void manageTimeout()
 {
-  //current_positive = millis();  // pobierz czas.
-  current_time = millis();
+  if(nrfdata.slowtime == true)
+  {
+    delegate_to_longsleep == false;
+    sleeptime = SLEEP_250MS;    // zmniejszone probkowanie
+  }
+  else if(nrfdata.sleeptime == true)
+  {
+    delegate_to_longsleep == true;
+    sleeptime = SLEEP_FOREVER;    // spanie na amen
+  }
+  else
+  {
+    delegate_to_longsleep == false;
+    sleeptime = SLEEP_120MS;    // domyslne
+  }
+}
 
-  //current_time = current_time - last_time;
+/*************************************************************************************
+ * Odczytuje odpowiedz z odbiornika o tym czy i kiedy nadajnik ma sie wylaczyc
+ * ***********************************************************************************/
+void read_answer_from_receiver()
+{
+  if(nrfdata.i_send == RF_SENDBACK)     // odczyt z odbiornika raz na 4 transmisje nadawcze
+  {
+    radio.openReadingPipe(0, address);  // przestawiamy na odbior
+    radio.startListening();             // nasluchujemy
 
-  if(current_time > TIME_TO_WAIT_MS && current_time < TIMEOUT_1) // pierwszy prog
-  {
-    sleeptime = SLEEP_120MS;
+    if(radio.available())               // jesli cos jest
+    {
+      radio.read(&nrfdata, sizeof(nrfdata));  // czytamy
+
+      //nrfdata.i_send = 0;    // zeruje to odbiornik.
+
+      #ifdef DEBUGMODE
+        Serial.println(nrfdata.i_send); //delayMicroseconds(400);
+        Serial.println(nrfdata.slowtime); delayMicroseconds(400);
+        Serial.println(nrfdata.sleeptime); delayMicroseconds(400);
+      #endif
+      
+      //uc_state = UC_BTN_CHECK;
+    }
   }
-  else if(current_time > TIMEOUT_1 && current_time < TIMEOUT_2) // drugi prog
+  else
   {
-    // zmniejsz probkowanie 2x/s
-    sleeptime = SLEEP_500MS; // 1S
+    //uc_state = UC_BTN_CHECK;
   }
-  else if(current_time > TIMEOUT_2 )
-  {
-    delegate_to_longsleep = true;
-    device_in_longsleep = true;
-  }
+}
+
+void set_back_to_transmit()
+{
+  radio.openWritingPipe(address);       // przestawiamy sie na transmisje
+  radio.stopListening();                // konczymy nasluch
 }
 
 void setup() {
@@ -153,13 +207,12 @@ void setup() {
 
   PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
 
-/*
+
   for (byte i = 0; i <= A5; i++)
   {
     pinModeFast(i, OUTPUT);    // changed as per below
     digitalWriteFast(i, LOW);  //     ditto
   }
-*/
 
   pinModeFast(LED_PIN,OUTPUT);
   pinModeFast(SPEAKER_PIN,OUTPUT);
@@ -178,18 +231,25 @@ void setup() {
   digitalWriteFast(MISO,HIGH);
   digitalWriteFast(SCK,HIGH);
 
-
-  //last_blink = millis();
-
   uc_state = UC_GO_SLEEP; // default uC state
 
-
   bme1.beginSPI(8);
-  Serial.begin(115200);
+  //Serial.begin(115200);
+  
   radio.begin();
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_LOW);
   radio.stopListening();
+
+  nrfdata.reset = true;     //
+  nrfdata.bme_data = bme1.readFixedPressure();        // Odczyt z czujnika bme
+  radio.write(&nrfdata, sizeof(nrfdata));   // Wyslij dane przez nRF
+  nrfdata.reset = false;
+  for(int i=0; i<8; i++)
+  {
+    digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+    delay(100);
+  }
 }
 
 void loop() {
@@ -206,24 +266,41 @@ void loop() {
       }
       else    // krotka kima
       {
-        Serial.println("sleep"); delayMicroseconds(550);
+        //radio.powerDown();
+        //Serial.println("sleep"); delayMicroseconds(550);
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(SLEEP_250MS,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
         interrupts();
+        power_spi_enable(); // SPI
+        //radio.powerUp();
+        
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
       }
       break;
     }
     case UC_WAKE_AND_CHECK:
     {
-      power_spi_enable(); // SPI
-      
-      bme_data = bme1.readFixedPressure();        // Odczyt z czujnika bme
-      radio.write(&bme_data, sizeof(bme_data));   // Wyslij dane przez nRF
-      //Serial.print("BME nadano:");                // debug
-      //Serial.println(bme_data);                   // debug
+      set_back_to_transmit();
 
-      uc_state = UC_BTN_CHECK;
+      nrfdata.bme_data = bme1.readFixedPressure();        // Odczyt z czujnika bme
+      radio.write(&nrfdata, sizeof(nrfdata));   // Wyslij dane przez nRF
+
+      //Serial.print("BME nadano:");                // debug
+      //Serial.println(nrfdata.bme_data);           // debug
+
+      if(nrfdata.i_send == RF_SENDBACK)
+      {
+        uc_state = UC_WAITING_FOR_SENDBACK;
+      }
+      else
+      {
+        nrfdata.i_send++;                           // licznik nadan
+      }
+      //break;
+    }
+    case UC_WAITING_FOR_SENDBACK:
+    {
+      read_answer_from_receiver();
       break;
     }
     case UC_BTN_CHECK:
@@ -247,12 +324,12 @@ void loop() {
         }
         if(btn_rst_counter >= SW_RST_COUNT)
         {
-          for(int i=0; i<20; i++)
+          for(int i=0; i<12; i++)
           {
             digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
             delay(100);
           }
-          softReset();
+          //softReset();
         }
       }
 
@@ -329,5 +406,7 @@ void loop() {
       break;
     }
   }
-  checkTimeout();
+  manageTimeout();
+  digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+  delay(25);
 }
