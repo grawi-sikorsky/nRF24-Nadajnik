@@ -32,17 +32,24 @@
 #include "TinyBME280.h"
 tiny::BME280 bme1; //Uses I2C address 0x76 (jumper closed)
 
+// PRESSURE DEFINICJE I ZMIENNE
+#define BME_AVG_COUNT 20      // wiecej -> dluzszy powrot avg do normy
+#define BME_AVG_DIFF  800     // im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
+#define BME_AVG_SENS  200     // czulosc dmuchniecia
+float bme_raw;                // dane raw z BME280
+float bme_tbl[BME_AVG_COUNT]; // tablica z probkami cisnienia 
+float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
+int   bme_avg_i = 0;          // licznik AVG
+bool  bme_rozbieg = true;     // info o pierwszym wypelnianiu tabeli AVG
+bool  gwizd_on    = false;    // info o aktywnym gwizdku
+time_t gwizd_start_at;        // timeout gwizd
+
 struct outdata
 {
-  float bme_data;   // cisnienie z nadajnika
-  int   i_send;      // licznik z nadajnika
-  bool  slowtime;   // zwolnij odswiezanie
-  bool  sleeptime;  // uspij nadajnik
-  bool  reset;
+  bool    sendgwizd;
+  time_t  odbiornik_gwizd_time_at;
 };
 outdata nrfdata;
-
-//float bme_data;
 
 enum uc_State {
   UC_GO_SLEEP = 0,
@@ -52,13 +59,12 @@ enum uc_State {
 };
 uc_State uc_state;
 
-RF24 radio(9, 10); // CE, CSN
-const byte address[17] = "1100110011001100";
-int i_receive = 0;
-int received_state;
-bool transmit_done;
+//RF24 radio(9, 10); // CE, CSN - UNO
+RF24 radio(8, 9); // CE, CSN
+const byte address[12] = "Uodbiurnik1";  // domyslny adres odbiornika
 
-period_t sleeptime;
+
+period_t sleeptime = SLEEP_120MS;
 time_t current_time, last_time;
 time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
 bool btn_state = LOW;
@@ -68,6 +74,9 @@ int btn_rst_counter = 0;
 bool device_in_longsleep = false;
 bool delegate_to_longsleep = false;
 
+//#define DEBUGSERIAL
+//#define DEBUG
+//#define UNO
 
 /*****************************************************
  * Obsluga przerwania przycisku
@@ -102,7 +111,7 @@ void prepareToSleep()
 
   power_adc_disable(); // ADC converter
   power_spi_disable(); // SPI
-  #ifdef DEBUGMODE
+  #ifdef UNO
     power_usart0_enable();// Serial (USART) test
   #else
     power_usart0_disable();
@@ -129,28 +138,121 @@ void softReset(){
 /*********************************************************************
  * PO ODEBRANIU INFO Z ODBIORNIKA USTAWIA CZAS PROBKOWANIA I SPANIA
  * *******************************************************************/
+/*
 void manageTimeout()
 {
   if(nrfdata.slowtime == true)
   {
-    delegate_to_longsleep == false;
+    delegate_to_longsleep = false;
     sleeptime = SLEEP_250MS;    // zmniejszone probkowanie
   }
   else if(nrfdata.sleeptime == true)
   {
-    delegate_to_longsleep == true;
+    delegate_to_longsleep = true;
     sleeptime = SLEEP_FOREVER;    // spanie na amen
   }
   else
   {
-    delegate_to_longsleep == false;
+    delegate_to_longsleep = false;
     sleeptime = SLEEP_120MS;    // domyslne
+  }
+}
+*/
+// ODCZYTUJE Z BME
+void pressure_read()
+{
+  bme_raw = bme1.readFixedPressure();        // Odczyt z czujnika bme
+  #ifdef DEBUGSERIAL
+    //Serial.println(bme_raw);
+  #endif
+}
+
+/*********************************************************************
+ * FUNKCJA ROZBIEGOWA TABLICY Z PROBKAMI CISNIENIA
+ * URUCHAMIANA RAZ PO DLUZSZEJ (RF_OFF_TIME) NIEAKTYWNOSCI NADAJNIKA
+ * *******************************************************************/
+void pressure_prepare()
+{
+  // START ODBIORU I USREDNIANIE DANYCH
+  for(int i=0; i < BME_AVG_COUNT; i++)  // w rozbiegu usredniaj wraz z rosnacym licznikiem i.
+  {
+    bme_tbl[i] = bme_raw;      // przypisz dane z nadajnika x AVG COUNT
+    bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
+  }
+  bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
+  bme_rozbieg = false;
+  bme_avg_i = 0;
+
+  #ifdef DEBUGSERIAL
+    Serial.println(bme_avg);
+  #endif
+}
+
+/*********************************************************************
+ * ODBIOR DANYCH Z NADAJNIKA I USREDNIENIE WYNIKU DO DALSZYCH DZIALAN
+ * URUCHAMIANE TYLKO KIEDY NADAJNIK ODBIERA BME
+ * *******************************************************************/
+void manage_pressure()
+{
+  // ROZBIEG TABLICY SREDNIEGO CISNIENIA
+  if(bme_rozbieg == true)
+  {
+    pressure_prepare();
+    #ifdef DEBUGSERIAL
+      Serial.println("pressure prepare");
+    #endif
+  }
+
+  // START USREDNIANIA DANYCH
+  if(bme_avg_i < BME_AVG_COUNT)
+  {
+    if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)))  // jesli obecne probka miesci sie w widelkach +-[BME_AVG_DIFF] 
+    {
+      bme_tbl[bme_avg_i] = bme_raw;  // dodaj nowa wartosc do tabeli
+      bme_avg_i++;                    // zwieksz licznik
+    }
+  }
+  else
+  {
+    bme_avg_i = 0;
+  }
+
+  bme_avg = 0;                          // zeruj srednia przed petla
+  for(int i=0; i <= BME_AVG_COUNT; i++) // Usredniaj zgodnie z iloscia probek [BME_AVG_COUNT]
+  {
+    bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
+  }
+  bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
+}
+
+/*********************************************************************
+ * SPRAWDZA CZY NASTAPIL WZROST CISNIENIA W STOSUNKU DO SREDNIEJ AVG
+ * CZULOSC BME_AVG_SENS
+ * *******************************************************************/
+void check_pressure()
+{
+  if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
+  {
+    #ifdef DEBUGSERIAL
+      Serial.println("GWIZD ON");
+    #endif
+
+    gwizd_on = true;                                  // ustaw gwizdek aktywny
+    gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
+  }
+  else if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)) && gwizd_on == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
+  {
+    #ifdef DEBUGSERIAL
+      Serial.println("Gwizd OFF");
+    #endif
+    gwizd_on = false;                                 // flaga gwizdka rowniez OFF
   }
 }
 
 /*************************************************************************************
  * Odczytuje odpowiedz z odbiornika o tym czy i kiedy nadajnik ma sie wylaczyc
  * ***********************************************************************************/
+/*
 void read_answer_from_receiver()
 {
   if(nrfdata.i_send == RF_SENDBACK)     // odczyt z odbiornika raz na 4 transmisje nadawcze
@@ -160,6 +262,12 @@ void read_answer_from_receiver()
 
     if(radio.available())               // jesli cos jest
     {
+        for(int i=0; i < 10; i++)
+        {
+          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          delay(25);
+        }
+
       radio.read(&nrfdata, sizeof(nrfdata));  // czytamy
 
       //nrfdata.i_send = 0;    // zeruje to odbiornik.
@@ -170,15 +278,15 @@ void read_answer_from_receiver()
         Serial.println(nrfdata.sleeptime); delayMicroseconds(400);
       #endif
       
-      //uc_state = UC_BTN_CHECK;
+      uc_state = UC_BTN_CHECK;
     }
   }
   else
   {
-    //uc_state = UC_BTN_CHECK;
+    uc_state = UC_BTN_CHECK;
   }
 }
-
+*/
 void set_back_to_transmit()
 {
   radio.openWritingPipe(address);       // przestawiamy sie na transmisje
@@ -196,7 +304,7 @@ void setup() {
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
   power_adc_disable(); // ADC converter
   //power_spi_disable(); // SPI
-  #ifdef DEBUGMODE
+  #ifdef UNO
     power_usart0_enable();// Serial (USART) test
   #else
     power_usart0_disable();
@@ -207,49 +315,53 @@ void setup() {
 
   PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
 
+  #ifndef UNO
+    for (byte i = 0; i <= A5; i++)
+    {
+      pinModeFast(i, OUTPUT);    // changed as per below
+      digitalWriteFast(i, LOW);  //     ditto
+    }
 
-  for (byte i = 0; i <= A5; i++)
-  {
-    pinModeFast(i, OUTPUT);    // changed as per below
-    digitalWriteFast(i, LOW);  //     ditto
-  }
+    pinModeFast(LED_PIN,OUTPUT);
+    pinModeFast(SPEAKER_PIN,OUTPUT);
+    pinModeFast(TRANSMISION_PIN,OUTPUT);
+    pinModeFast(USER_SWITCH,INPUT);
+    digitalWriteFast(LED_PIN, LOW);  // LED OFF
+    digitalWriteFast(SPEAKER_PIN, LOW);    // SPK
+    digitalWriteFast(TRANSMISION_PIN, LOW);    // RF433
 
-  pinModeFast(LED_PIN,OUTPUT);
-  pinModeFast(SPEAKER_PIN,OUTPUT);
-  pinModeFast(TRANSMISION_PIN,OUTPUT);
-  pinModeFast(USER_SWITCH,INPUT);
-  digitalWriteFast(LED_PIN, LOW);  // LED OFF
-  digitalWriteFast(SPEAKER_PIN, LOW);    // SPK
-  digitalWriteFast(TRANSMISION_PIN, LOW);    // RF433
-
-  pinModeFast(SS,OUTPUT);
-  pinModeFast(MOSI,OUTPUT);
-  pinModeFast(MISO,OUTPUT);
-  pinModeFast(SCK,OUTPUT);
-  digitalWriteFast(SS,HIGH);
-  digitalWriteFast(MOSI,HIGH);
-  digitalWriteFast(MISO,HIGH);
-  digitalWriteFast(SCK,HIGH);
+    pinModeFast(SS,OUTPUT);
+    pinModeFast(MOSI,OUTPUT);
+    pinModeFast(MISO,OUTPUT);
+    pinModeFast(SCK,OUTPUT);
+    digitalWriteFast(SS,HIGH);
+    digitalWriteFast(MOSI,HIGH);
+    digitalWriteFast(MISO,HIGH);
+    digitalWriteFast(SCK,HIGH);
+  #endif
 
   uc_state = UC_GO_SLEEP; // default uC state
 
-  bme1.beginSPI(8);
-  //Serial.begin(115200);
+  bme1.beginSPI(10); // 8 w uno
+
+  #ifdef DEBUGSERIAL
+    Serial.begin(115200);
+  #endif
   
   radio.begin();
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_LOW);
   radio.stopListening();
 
-  nrfdata.reset = true;     //
-  nrfdata.bme_data = bme1.readFixedPressure();        // Odczyt z czujnika bme
-  radio.write(&nrfdata, sizeof(nrfdata));   // Wyslij dane przez nRF
-  nrfdata.reset = false;
+  pressure_read();      // odczyt z bme
+  pressure_prepare();   // rozbieg tablicy avg
+
   for(int i=0; i<8; i++)
   {
     digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
     delay(100);
   }
+  //Serial.println(address);
 }
 
 void loop() {
@@ -259,48 +371,54 @@ void loop() {
     {
       if (delegate_to_longsleep == true)  // dluga kima
       {
-        //Serial.println("deepsleep"); delayMicroseconds(950);
+        #ifdef DEBUGSERIAL
+          Serial.println("longsleep");
+        #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         attachInterrupt(digitalPinToInterrupt(2), ISR_INT0_vect, RISING); // przerwanie sw
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
       }
       else    // krotka kima
       {
-        //radio.powerDown();
-        //Serial.println("sleep"); delayMicroseconds(550);
+        #ifdef DEBUGSERIAL
+          //Serial.println("shortsleep"); delayMicroseconds(850);
+        #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(SLEEP_120MS,ADC_OFF,BOD_OFF);
         interrupts();
         power_spi_enable(); // SPI
-        //radio.powerUp();
-        
+
+        #ifndef UNO
+          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          delay(25);
+          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          delay(25);
+        #endif
+
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
-      }
-      break;
-    }
-    case UC_WAKE_AND_CHECK:
-    {
-      set_back_to_transmit();
-
-      nrfdata.bme_data = bme1.readFixedPressure();        // Odczyt z czujnika bme
-      radio.write(&nrfdata, sizeof(nrfdata));   // Wyslij dane przez nRF
-
-      //Serial.print("BME nadano:");                // debug
-      //Serial.println(nrfdata.bme_data);           // debug
-
-      if(nrfdata.i_send == RF_SENDBACK)
-      {
-        uc_state = UC_WAITING_FOR_SENDBACK;
-      }
-      else
-      {
-        nrfdata.i_send++;                           // licznik nadan
       }
       //break;
     }
+    case UC_WAKE_AND_CHECK:
+    {
+      pressure_read();
+      manage_pressure();
+      check_pressure();
+
+      #ifdef DEBUGSERIAL
+        Serial.print("RAW: "); Serial.println(bme_raw);
+        Serial.print("AVG: "); Serial.println(bme_avg);
+      #endif
+
+      nrfdata.sendgwizd = gwizd_on;
+      radio.write(&nrfdata, sizeof(nrfdata));   // Wyslij dane przez nRF
+
+      uc_state = UC_GO_SLEEP;
+      break;
+    }
     case UC_WAITING_FOR_SENDBACK:
     {
-      read_answer_from_receiver();
+      //read_answer_from_receiver();
       break;
     }
     case UC_BTN_CHECK:
@@ -406,7 +524,5 @@ void loop() {
       break;
     }
   }
-  manageTimeout();
-  digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-  delay(25);
+  //manageTimeout();
 }
