@@ -46,7 +46,8 @@ time_t gwizd_start_at;        // timeout gwizd
 
 struct outdata
 {
-  bool    sendgwizd;
+  int     ID_nadajnika;
+  int     sendgwizd;
   time_t  odbiornik_gwizd_time_at;
 };
 outdata nrfdata;
