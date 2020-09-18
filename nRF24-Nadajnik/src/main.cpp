@@ -42,15 +42,33 @@ float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
 int   bme_avg_i = 0;          // licznik AVG
 bool  bme_rozbieg = true;     // info o pierwszym wypelnianiu tabeli AVG
 bool  gwizd_on    = false;    // info o aktywnym gwizdku
+bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
 time_t gwizd_start_at;        // timeout gwizd
+
+
+RF24 radio(8, 9); // CE, CSN
+const byte address[5] = "Odb1";  // domyslny adres odbiornika
+bool  whistle_connected = false;
+
+period_t sleeptime = SLEEP_120MS;
+time_t current_time;
+time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
+bool btn_state = LOW;
+bool btn_last_state = LOW;
+int btn_rst_counter = 0;
+
+bool device_in_longsleep = false;
+bool delegate_to_longsleep = false;
 
 struct outdata
 {
-  int     ID_nadajnika;
+  //int     ID_nadajnika;
   int     sendgwizd;
-  time_t  odbiornik_gwizd_time_at;
+  //time_t  odbiornik_gwizd_time_at;
 };
 outdata nrfdata;
+
+bool ackOK;
 
 enum uc_State {
   UC_GO_SLEEP = 0,
@@ -60,24 +78,9 @@ enum uc_State {
 };
 uc_State uc_state;
 
-//RF24 radio(9, 10); // CE, CSN - UNO
-RF24 radio(8, 9); // CE, CSN
-const byte address[12] = "Uodbiurnik1";  // domyslny adres odbiornika
-
-
-period_t sleeptime = SLEEP_120MS;
-time_t current_time, last_time;
-time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
-bool btn_state = LOW;
-bool btn_last_state = LOW;
-int btn_rst_counter = 0;
-
-bool device_in_longsleep = false;
-bool delegate_to_longsleep = false;
-
-//#define DEBUGSERIAL
+#define DEBUGSERIAL
 //#define DEBUG
-//#define UNO
+#define UNO
 
 /*****************************************************
  * Obsluga przerwania przycisku
@@ -136,29 +139,6 @@ void softReset(){
   while(1); //loop
 }
 
-/*********************************************************************
- * PO ODEBRANIU INFO Z ODBIORNIKA USTAWIA CZAS PROBKOWANIA I SPANIA
- * *******************************************************************/
-/*
-void manageTimeout()
-{
-  if(nrfdata.slowtime == true)
-  {
-    delegate_to_longsleep = false;
-    sleeptime = SLEEP_250MS;    // zmniejszone probkowanie
-  }
-  else if(nrfdata.sleeptime == true)
-  {
-    delegate_to_longsleep = true;
-    sleeptime = SLEEP_FOREVER;    // spanie na amen
-  }
-  else
-  {
-    delegate_to_longsleep = false;
-    sleeptime = SLEEP_120MS;    // domyslne
-  }
-}
-*/
 // ODCZYTUJE Z BME
 void pressure_read()
 {
@@ -217,6 +197,8 @@ void manage_pressure()
   {
     bme_avg_i = 0;
   }
+    unsigned long start = micros();
+    // Call to your function
 
   bme_avg = 0;                          // zeruj srednia przed petla
   for(int i=0; i <= BME_AVG_COUNT; i++) // Usredniaj zgodnie z iloscia probek [BME_AVG_COUNT]
@@ -224,6 +206,11 @@ void manage_pressure()
     bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
   }
   bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
+
+    // Compute the time it took
+    unsigned long end = micros();
+    unsigned long delta = end - start;
+  Serial.print("czas: ");Serial.println(delta);
 }
 
 /*********************************************************************
@@ -232,6 +219,10 @@ void manage_pressure()
  * *******************************************************************/
 void check_pressure()
 {
+  if(no_gwizd == true)
+  {
+    nrfdata.sendgwizd = 2;
+  }
   if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
   {
     #ifdef DEBUGSERIAL
@@ -239,6 +230,8 @@ void check_pressure()
     #endif
 
     gwizd_on = true;                                  // ustaw gwizdek aktywny
+    no_gwizd = false;
+    nrfdata.sendgwizd = 1;
     gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
   }
   else if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)) && gwizd_on == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
@@ -246,52 +239,55 @@ void check_pressure()
     #ifdef DEBUGSERIAL
       Serial.println("Gwizd OFF");
     #endif
+    nrfdata.sendgwizd = 0;
     gwizd_on = false;                                 // flaga gwizdka rowniez OFF
+    no_gwizd = true;
   }
 }
 
-/*************************************************************************************
- * Odczytuje odpowiedz z odbiornika o tym czy i kiedy nadajnik ma sie wylaczyc
- * ***********************************************************************************/
-/*
-void read_answer_from_receiver()
+// PRZESTAWIA NADAJNIK NA TRANSMISJE
+void set_to_transmit()
 {
-  if(nrfdata.i_send == RF_SENDBACK)     // odczyt z odbiornika raz na 4 transmisje nadawcze
+  radio.openWritingPipe(address);       // przestawiamy sie na transmisje
+  radio.stopListening();                // konczymy nasluch
+}
+
+// PRZESTAWIA NADAJNIK NA ODBIOR
+void set_to_reading()
+{
+  radio.openReadingPipe(0, address);
+  radio.startListening();
+}
+
+// PIERWSZA TRANSMISJA Z ODBIOREM ID OD ODBIORNIKA
+// Przypisuje ID z odbiornika do nrfdata
+// ustawia flage whistle_connected = true
+bool SendRFData()
+{
+  bool result;
+  result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
+
+  if(result)
   {
-    radio.openReadingPipe(0, address);  // przestawiamy na odbior
-    radio.startListening();             // nasluchujemy
-
-    if(radio.available())               // jesli cos jest
+    if ( radio.isAckPayloadAvailable() ) 
     {
-        for(int i=0; i < 10; i++)
-        {
-          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          delay(25);
-        }
-
-      radio.read(&nrfdata, sizeof(nrfdata));  // czytamy
-
-      //nrfdata.i_send = 0;    // zeruje to odbiornik.
-
-      #ifdef DEBUGMODE
-        Serial.println(nrfdata.i_send); //delayMicroseconds(400);
-        Serial.println(nrfdata.slowtime); delayMicroseconds(400);
-        Serial.println(nrfdata.sleeptime); delayMicroseconds(400);
-      #endif
-      
-      uc_state = UC_BTN_CHECK;
+      radio.read(&ackOK, sizeof(ackOK));
+      whistle_connected = true;
+      Serial.print("ACK:"); Serial.println(ackOK);
+    }
+    else
+    {
+      whistle_connected = false;
+      Serial.print("ACK OK, no data");
     }
   }
   else
   {
-    uc_state = UC_BTN_CHECK;
+    whistle_connected = false;
+    Serial.print("NO ACK");
   }
-}
-*/
-void set_back_to_transmit()
-{
-  radio.openWritingPipe(address);       // przestawiamy sie na transmisje
-  radio.stopListening();                // konczymy nasluch
+
+  return whistle_connected;
 }
 
 void setup() {
@@ -351,18 +347,23 @@ void setup() {
   
   radio.begin();
   radio.openWritingPipe(address);
-  radio.setPALevel(RF24_PA_LOW);
+  radio.enableAckPayload();
+  radio.setRetries(1,8); // delay, count
+  radio.setDataRate(RF24_250KBPS);
+  radio.setPALevel(RF24_PA_HIGH);
+  radio.setChannel(95);
   radio.stopListening();
 
   pressure_read();      // odczyt z bme
   pressure_prepare();   // rozbieg tablicy avg
+
+  //setup_whistle_ID();   // pierwsza transmisja z odbiorem danych z odbiornika z przekazaniem wlasciwego ID.
 
   for(int i=0; i<8; i++)
   {
     digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
     delay(100);
   }
-  //Serial.println(address);
 }
 
 void loop() {
@@ -391,9 +392,9 @@ void loop() {
 
         #ifndef UNO
           digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          delay(25);
-          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          delay(25);
+          delay(5);
+          //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          //delay(25);
         #endif
 
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
@@ -402,18 +403,24 @@ void loop() {
     }
     case UC_WAKE_AND_CHECK:
     {
-      pressure_read();
-      manage_pressure();
-      check_pressure();
+        pressure_read();
+        manage_pressure();
+        check_pressure();
 
-      #ifdef DEBUGSERIAL
-        Serial.print("RAW: "); Serial.println(bme_raw);
-        Serial.print("AVG: "); Serial.println(bme_avg);
-      #endif
+        #ifdef DEBUGSERIAL
+          Serial.print("RAW: "); Serial.println(bme_raw);
+          Serial.print("AVG: "); Serial.println(bme_avg);
+        #endif
 
-      nrfdata.sendgwizd = gwizd_on;
-      radio.write(&nrfdata, sizeof(nrfdata));   // Wyslij dane przez nRF
+        if(SendRFData() == false)
+        {
+          //delayMicroseconds(1500);
 
+          if(SendRFData() == true) break;
+          //else SendRFData();
+        
+        }
+        
       uc_state = UC_GO_SLEEP;
       break;
     }
