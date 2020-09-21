@@ -25,8 +25,8 @@
 
 #define RF_SENDBACK     25          // ilosc transmisji nadawczych do odbioru powrotnej (musi byc identyczna z Odbiornikiem!)
 
-#define RF_REPEAT       4           // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
-#define RF_OFF_REPEAT   1           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
+#define RF_REPEAT       6           // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
+#define RF_OFF_REPEAT   2           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
 
 // BME280 LIB
 #define TINY_BME280_SPI
