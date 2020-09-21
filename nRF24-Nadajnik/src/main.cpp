@@ -17,15 +17,16 @@
 #define USER_SWITCH     2 // PD2 INT0
 
 #define SWITCH_TIMEOUT  3000          // czas przycisku nacisniecia
-#define SW_RST_TIMEOUT  100          // czas w ktorym należy wykonac klikniecia dla RST
+#define SW_RST_TIMEOUT  250          // czas w ktorym należy wykonac klikniecia dla RST
 #define SW_RST_COUNT    5             // ilosc nacisniec do wykonania resetu
-#define TIME_TO_WAIT_MS 50            // czas do nastepnego wyzwolenia????
-#define TIMEOUT_1       72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
-#define TIMEOUT_2       144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
+#define TIME_TO_WAIT_MS 5            // czas do nastepnego wyzwolenia????
+#define TIMEOUT_1       10000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
+#define TIMEOUT_2       30000//144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
 
 #define RF_SENDBACK     25          // ilosc transmisji nadawczych do odbioru powrotnej (musi byc identyczna z Odbiornikiem!)
 
-//#define DEBUGMODE
+#define RF_REPEAT       4           // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
+#define RF_OFF_REPEAT   1           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
 
 // BME280 LIB
 #define TINY_BME280_SPI
@@ -37,13 +38,15 @@ tiny::BME280 bme1; //Uses I2C address 0x76 (jumper closed)
 #define BME_AVG_DIFF  800     // im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
 #define BME_AVG_SENS  200     // czulosc dmuchniecia
 float bme_raw;                // dane raw z BME280
-float bme_tbl[BME_AVG_COUNT]; // tablica z probkami cisnienia 
+float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
 float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
 int   bme_avg_i = 0;          // licznik AVG
 bool  bme_rozbieg = true;     // info o pierwszym wypelnianiu tabeli AVG
 bool  gwizd_on    = false;    // info o aktywnym gwizdku
 bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
-time_t gwizd_start_at;        // timeout gwizd
+int   rf_repeat   = 0;        // ilosc powtorzen transmisji do odbiornika
+int   rf_off_repeat = 0;      // ilosc powtorzen wysylki 0 (off) do odbiornika
+time_t gwizd_start_at, giwzd_timeout;        // timeout gwizd
 
 
 RF24 radio(8, 9); // CE, CSN
@@ -63,8 +66,9 @@ bool delegate_to_longsleep = false;
 struct outdata
 {
   //int     ID_nadajnika;
-  int     sendgwizd;
-  //time_t  odbiornik_gwizd_time_at;
+  int     sendgwizd = 2;
+  float   raw;
+  float   avg;
 };
 outdata nrfdata;
 
@@ -78,9 +82,9 @@ enum uc_State {
 };
 uc_State uc_state;
 
-#define DEBUGSERIAL
+//#define DEBUGSERIAL
 //#define DEBUG
-#define UNO
+//#define UNO
 
 /*****************************************************
  * Obsluga przerwania przycisku
@@ -92,7 +96,7 @@ void ButtonPressed()
     btn_pressed_time = millis();
 
     // wlacz i przejdz do sprawdzenia stanu przycisku
-    //uc_state = UC_BTN_CHECK;
+    uc_state = UC_BTN_CHECK;
   }
 }
 
@@ -132,16 +136,22 @@ void prepareToSleep()
 /*****************************************************
  * SW reset - dont reset peripherials
  * ***************************************************/
-void softReset(){
+void softReset()
+{
   //asm volatile ("  jmp 0");
   cli(); //irq's off
   wdt_enable(WDTO_60MS); //wd on,15ms
   while(1); //loop
 }
 
+void(* resetFunc) (void) = 0;//declare reset function at address 0
+
+
 // ODCZYTUJE Z BME
 void pressure_read()
 {
+  if(bme_rozbieg == true) delay(2);
+
   bme_raw = bme1.readFixedPressure();        // Odczyt z czujnika bme
   #ifdef DEBUGSERIAL
     //Serial.println(bme_raw);
@@ -170,6 +180,20 @@ void pressure_prepare()
 }
 
 /*********************************************************************
+ * FUNKCJA CZYSZCZACA TABLICE Z PROBKAMI CISNIENIA
+ * USTAWIA BME_ROZBIEG NA TRUE!
+ * *******************************************************************/
+void clear_pressure_avg()
+{
+  for (int i = 0; i < BME_AVG_COUNT; i++)
+  {
+    bme_tbl[i] = 0;
+  }
+  bme_avg = bme_avg_i = 0;
+  bme_rozbieg = true;
+}
+
+/*********************************************************************
  * ODBIOR DANYCH Z NADAJNIKA I USREDNIENIE WYNIKU DO DALSZYCH DZIALAN
  * URUCHAMIANE TYLKO KIEDY NADAJNIK ODBIERA BME
  * *******************************************************************/
@@ -178,6 +202,7 @@ void manage_pressure()
   // ROZBIEG TABLICY SREDNIEGO CISNIENIA
   if(bme_rozbieg == true)
   {
+    clear_pressure_avg();
     pressure_prepare();
     #ifdef DEBUGSERIAL
       Serial.println("pressure prepare");
@@ -216,12 +241,23 @@ void manage_pressure()
 /*********************************************************************
  * SPRAWDZA CZY NASTAPIL WZROST CISNIENIA W STOSUNKU DO SREDNIEJ AVG
  * CZULOSC BME_AVG_SENS
+ * 0  - WYLACZ WYJSCIA
+ * 1  - WLACZ WYJSCIA
+ * 2  - BRAK TRANSMISJI [aby nie kolidowac z innym nadajnikiem]
  * *******************************************************************/
 void check_pressure()
 {
-  if(no_gwizd == true)
+  if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
   {
-    nrfdata.sendgwizd = 2;
+    if(rf_off_repeat < RF_OFF_REPEAT)     //  jesli 
+    {
+      nrfdata.sendgwizd = 0;              // najpierw 0 jako informacja o wylaczeniu
+      rf_off_repeat++;
+    }
+    else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
+    {
+      nrfdata.sendgwizd = 2;
+    }
   }
   if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
   {
@@ -230,8 +266,8 @@ void check_pressure()
     #endif
 
     gwizd_on = true;                                  // ustaw gwizdek aktywny
-    no_gwizd = false;
-    nrfdata.sendgwizd = 1;
+    no_gwizd = false;                                 // ustaw brak transmisji jako nieprawda
+    nrfdata.sendgwizd = 1;                            // dane do wysylki
     gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
   }
   else if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)) && gwizd_on == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
@@ -241,8 +277,41 @@ void check_pressure()
     #endif
     nrfdata.sendgwizd = 0;
     gwizd_on = false;                                 // flaga gwizdka rowniez OFF
+    rf_off_repeat = 0;                                // zeruj licznik powtorzen wysylki 0
     no_gwizd = true;
   }
+}
+
+/*********************************************************************
+ * Odlicza Czas do wylaczenia
+ * *******************************************************************/
+void manageTimeout()
+{
+  //current_positive = millis();  // pobierz czas.
+  //current_timeout = current_positive - last_positive;
+
+  current_time = millis();
+  giwzd_timeout = current_time - gwizd_start_at;
+
+  if(giwzd_timeout > TIME_TO_WAIT_MS && giwzd_timeout < TIMEOUT_1) // pierwszy prog
+  {
+    sleeptime = SLEEP_120MS;
+  }
+  else if(giwzd_timeout > TIMEOUT_1 && giwzd_timeout < TIMEOUT_2) // drugi prog
+  {
+    // zmniejsz probkowanie 2x/s
+    sleeptime = SLEEP_500MS; // 1S
+  } 
+  else if(giwzd_timeout > TIMEOUT_2 )
+  { 
+    delegate_to_longsleep = true;
+    device_in_longsleep = true;
+  }  
+  #ifdef DEBUGSERIAL
+    Serial.print("gtimeout: "); Serial.println(giwzd_timeout);
+    Serial.print("gcur: "); Serial.println(current_time);
+    Serial.print("gat: "); Serial.println(gwizd_start_at);
+  #endif
 }
 
 // PRZESTAWIA NADAJNIK NA TRANSMISJE
@@ -278,13 +347,13 @@ bool SendRFData()
     else
     {
       whistle_connected = false;
-      Serial.print("ACK OK, no data");
+      Serial.println("ACK OK, no data");
     }
   }
   else
   {
     whistle_connected = false;
-    Serial.print("NO ACK");
+    Serial.println("NO ACK");
   }
 
   return whistle_connected;
@@ -339,7 +408,7 @@ void setup() {
 
   uc_state = UC_GO_SLEEP; // default uC state
 
-  bme1.beginSPI(10); // 8 w uno
+  bme1.beginSPI(10);
 
   #ifdef DEBUGSERIAL
     Serial.begin(115200);
@@ -354,15 +423,16 @@ void setup() {
   radio.setChannel(95);
   radio.stopListening();
 
+  sleeptime = SLEEP_120MS;
+  rf_repeat = 0;
+
   pressure_read();      // odczyt z bme
   pressure_prepare();   // rozbieg tablicy avg
-
-  //setup_whistle_ID();   // pierwsza transmisja z odbiorem danych z odbiornika z przekazaniem wlasciwego ID.
 
   for(int i=0; i<8; i++)
   {
     digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-    delay(100);
+    delay(50);
   }
 }
 
@@ -374,11 +444,13 @@ void loop() {
       if (delegate_to_longsleep == true)  // dluga kima
       {
         #ifdef DEBUGSERIAL
-          Serial.println("longsleep");
+          Serial.println("longsleep"); delay(500);
         #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         attachInterrupt(digitalPinToInterrupt(2), ISR_INT0_vect, RISING); // przerwanie sw
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
+        power_spi_enable(); // SPI
+        bme_rozbieg = true;
       }
       else    // krotka kima
       {
@@ -386,23 +458,24 @@ void loop() {
           //Serial.println("shortsleep"); delayMicroseconds(850);
         #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(SLEEP_120MS,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
         interrupts();
         power_spi_enable(); // SPI
 
         #ifndef UNO
           digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
           delay(5);
-          //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
           //delay(25);
         #endif
 
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
       }
-      //break;
+      break;
     }
     case UC_WAKE_AND_CHECK:
     {
+        current_time = millis();
         pressure_read();
         manage_pressure();
         check_pressure();
@@ -411,17 +484,23 @@ void loop() {
           Serial.print("RAW: "); Serial.println(bme_raw);
           Serial.print("AVG: "); Serial.println(bme_avg);
         #endif
+        nrfdata.raw = bme_raw;
+        nrfdata.avg = bme_avg;
 
-        if(SendRFData() == false)
+        if(gwizd_on)
         {
-          //delayMicroseconds(1500);
-
-          if(SendRFData() == true) break;
-          //else SendRFData();
-        
+          SendRFData();
+          rf_repeat = 0;
         }
-        
-      uc_state = UC_GO_SLEEP;
+        else
+        {
+          if ( rf_repeat < RF_REPEAT )
+          {
+            SendRFData();
+            rf_repeat++;
+          }
+        }
+        uc_state = UC_BTN_CHECK;
       break;
     }
     case UC_WAITING_FOR_SENDBACK:
@@ -431,6 +510,10 @@ void loop() {
     }
     case UC_BTN_CHECK:
     {
+      delegate_to_longsleep = false;  // inaczej pojdzie spac long
+                                      // device_is_off pozostaje dla ustalenia czy 
+                                      // nadajnik był wybudzony czy pracowal normalnie
+
       btn_last_state = btn_state;               // do rst
       btn_state = digitalReadFast(USER_SWITCH); // odczyt stanu guzika
       
@@ -456,6 +539,7 @@ void loop() {
             delay(100);
           }
           //softReset();
+          resetFunc(); //call reset
         }
       }
 
@@ -497,8 +581,8 @@ void loop() {
           device_in_longsleep = false;
 
           // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
-          // dlatego last positive = teraz
-          // last_positive = current_time; 
+          // dlatego gwizd_start_at = teraz
+          gwizd_start_at = current_time; 
 
           detachInterrupt(digitalPinToInterrupt(2));
           uc_state = UC_WAKE_AND_CHECK;
@@ -532,5 +616,5 @@ void loop() {
       break;
     }
   }
-  //manageTimeout();
+  manageTimeout();
 }
