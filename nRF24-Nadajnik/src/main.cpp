@@ -419,7 +419,7 @@ void setup() {
   radio.enableAckPayload();
   radio.setRetries(1,8); // delay, count
   radio.setDataRate(RF24_250KBPS);
-  radio.setPALevel(RF24_PA_HIGH);
+  radio.setPALevel(RF24_PA_MAX);
   radio.setChannel(95);
   radio.stopListening();
 
