@@ -53,7 +53,7 @@ RF24 radio(8, 9); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
 bool  whistle_connected = false;
 
-period_t sleeptime = SLEEP_120MS;
+period_t sleeptime = SLEEP_500MS;
 time_t current_time;
 time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
 bool btn_state = LOW;
@@ -118,7 +118,6 @@ void prepareToSleep()
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
 
   power_adc_disable(); // ADC converter
-  power_spi_disable(); // SPI
   #ifdef UNO
     power_usart0_enable();// Serial (USART) test
   #else
@@ -127,10 +126,12 @@ void prepareToSleep()
   //power_timer0_disable();// TIMER 0 SLEEP WDT ...
   power_timer1_disable();// Timer 1
   power_timer2_disable();// Timer 2
+  power_twi_disable(); // TWI (I2C)
+  
+  //PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
 
-  PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
-
-  //radio.powerDown();
+  radio.powerDown();// delay(5);
+  power_spi_disable(); // SPI
 }
 
 /*****************************************************
@@ -232,10 +233,12 @@ void manage_pressure()
   }
   bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
 
+  #ifdef DEBUGSERIAL
     // Compute the time it took
     unsigned long end = micros();
     unsigned long delta = end - start;
-  Serial.print("czas: ");Serial.println(delta);
+    Serial.print("czas: ");Serial.println(delta);
+  #endif
 }
 
 /*********************************************************************
@@ -295,7 +298,7 @@ void manageTimeout()
 
   if(giwzd_timeout > TIME_TO_WAIT_MS && giwzd_timeout < TIMEOUT_1) // pierwszy prog
   {
-    sleeptime = SLEEP_120MS;
+    sleeptime = SLEEP_500MS;
   }
   else if(giwzd_timeout > TIMEOUT_1 && giwzd_timeout < TIMEOUT_2) // drugi prog
   {
@@ -342,18 +345,24 @@ bool SendRFData()
     {
       radio.read(&ackOK, sizeof(ackOK));
       whistle_connected = true;
+      #ifdef DEBUGSERIAL
       Serial.print("ACK:"); Serial.println(ackOK);
+      #endif
     }
     else
     {
       whistle_connected = false;
+      #ifdef DEBUGSERIAL
       Serial.println("ACK OK, no data");
+      #endif
     }
   }
   else
   {
     whistle_connected = false;
-    Serial.println("NO ACK");
+      #ifdef DEBUGSERIAL
+      Serial.println("NO ACK");
+      #endif
   }
 
   return whistle_connected;
@@ -389,12 +398,8 @@ void setup() {
     }
 
     pinModeFast(LED_PIN,OUTPUT);
-    pinModeFast(SPEAKER_PIN,OUTPUT);
-    pinModeFast(TRANSMISION_PIN,OUTPUT);
     pinModeFast(USER_SWITCH,INPUT);
     digitalWriteFast(LED_PIN, LOW);  // LED OFF
-    digitalWriteFast(SPEAKER_PIN, LOW);    // SPK
-    digitalWriteFast(TRANSMISION_PIN, LOW);    // RF433
 
     pinModeFast(SS,OUTPUT);
     pinModeFast(MOSI,OUTPUT);
@@ -423,7 +428,7 @@ void setup() {
   radio.setChannel(95);
   radio.stopListening();
 
-  sleeptime = SLEEP_120MS;
+  sleeptime = SLEEP_500MS;
   rf_repeat = 0;
 
   pressure_read();      // odczyt z bme
@@ -461,11 +466,12 @@ void loop() {
         LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
         interrupts();
         power_spi_enable(); // SPI
+        radio.powerUp();
 
         #ifndef UNO
-          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          delay(5);
-          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          //delay(5);
+          //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
           //delay(25);
         #endif
 
