@@ -129,7 +129,7 @@ void prepareToSleep()
   power_twi_disable(); // TWI (I2C)
   
   //PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
-
+  radio.stopListening();
   radio.powerDown();// delay(5);
   power_spi_disable(); // SPI
 }
