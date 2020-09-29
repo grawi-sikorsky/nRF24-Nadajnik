@@ -53,7 +53,7 @@ RF24 radio(8, 9); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
 bool  whistle_connected = false;
 
-period_t sleeptime = SLEEP_500MS;
+period_t sleeptime = SLEEP_120MS;
 time_t current_time;
 time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
 bool btn_state = LOW;
@@ -109,28 +109,38 @@ void ISR_INT0_vect()
 }
 
 /*****************************************************
+ * Uruchamia niezbedne peryferia po spaniu
+ * ***************************************************/
+void wakeUp()
+{
+  power_spi_enable(); // SPI
+  radio.powerUp();
+  bme1.begin();
+  bme1.setMode(11);
+}
+
+/*****************************************************
  * Wylacza wszystko do spania
  * ***************************************************/
 void prepareToSleep()
 {
-  //clock_prescale_set(clock_div_16);
-
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
-
+  //power_timer0_disable();// TIMER 0 SLEEP WDT ...
+  power_timer1_disable();// Timer 1
+  power_timer2_disable();// Timer 2
+  power_twi_disable(); // TWI (I2C)
   power_adc_disable(); // ADC converter
+
   #ifdef UNO
     power_usart0_enable();// Serial (USART) test
   #else
     power_usart0_disable();
   #endif
-  //power_timer0_disable();// TIMER 0 SLEEP WDT ...
-  power_timer1_disable();// Timer 1
-  power_timer2_disable();// Timer 2
-  power_twi_disable(); // TWI (I2C)
-  
-  //PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
+
   radio.stopListening();
   radio.powerDown();// delay(5);
+  bme1.setMode(00);
+  bme1.end();
   power_spi_disable(); // SPI
 }
 
@@ -298,7 +308,7 @@ void manageTimeout()
 
   if(giwzd_timeout > TIME_TO_WAIT_MS && giwzd_timeout < TIMEOUT_1) // pierwszy prog
   {
-    sleeptime = SLEEP_500MS;
+    sleeptime = SLEEP_120MS;
   }
   else if(giwzd_timeout > TIMEOUT_1 && giwzd_timeout < TIMEOUT_2) // drugi prog
   {
@@ -315,20 +325,6 @@ void manageTimeout()
     Serial.print("gcur: "); Serial.println(current_time);
     Serial.print("gat: "); Serial.println(gwizd_start_at);
   #endif
-}
-
-// PRZESTAWIA NADAJNIK NA TRANSMISJE
-void set_to_transmit()
-{
-  radio.openWritingPipe(address);       // przestawiamy sie na transmisje
-  radio.stopListening();                // konczymy nasluch
-}
-
-// PRZESTAWIA NADAJNIK NA ODBIOR
-void set_to_reading()
-{
-  radio.openReadingPipe(0, address);
-  radio.startListening();
 }
 
 // PIERWSZA TRANSMISJA Z ODBIOREM ID OD ODBIORNIKA
@@ -368,27 +364,30 @@ bool SendRFData()
   return whistle_connected;
 }
 
-void setup() {
-  //clock_prescale_set(clock_div_1);
-  
+void setup() 
+{
+  uc_state = UC_GO_SLEEP; // default uC state
+
   // wylacz WDT
   MCUSR= 0 ;
   WDTCSR |= _BV(WDCE) | _BV(WDE);
   WDTCSR = 0;
 
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
+  //power_timer0_disable();// TIMER 0 SLEEP WDT ...
+  power_timer1_disable();// Timer 1
+  power_timer2_disable();// Timer 2
+  power_twi_disable(); // TWI (I2C)
   power_adc_disable(); // ADC converter
-  //power_spi_disable(); // SPI
+  
   #ifdef UNO
     power_usart0_enable();// Serial (USART) test
   #else
     power_usart0_disable();
   #endif
-  //power_timer0_disable();// TIMER 0 SLEEP WDT ...
-  power_timer1_disable();// Timer 1 - I2C...
-  power_timer2_disable();// Timer 2
-
-  PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
+  #ifdef DEBUGSERIAL
+    Serial.begin(115200);
+  #endif
 
   #ifndef UNO
     for (byte i = 0; i <= A5; i++)
@@ -411,14 +410,8 @@ void setup() {
     digitalWriteFast(SCK,HIGH);
   #endif
 
-  uc_state = UC_GO_SLEEP; // default uC state
-
   bme1.beginSPI(10);
 
-  #ifdef DEBUGSERIAL
-    Serial.begin(115200);
-  #endif
-  
   radio.begin();
   radio.openWritingPipe(address);
   radio.enableAckPayload();
@@ -428,11 +421,15 @@ void setup() {
   radio.setChannel(95);
   radio.stopListening();
 
-  sleeptime = SLEEP_500MS;
+  sleeptime = SLEEP_120MS;
   rf_repeat = 0;
 
   pressure_read();      // odczyt z bme
   pressure_prepare();   // rozbieg tablicy avg
+
+  radio.powerDown();
+  bme1.setMode(00);
+  bme1.end();
 
   for(int i=0; i<8; i++)
   {
@@ -454,7 +451,7 @@ void loop() {
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         attachInterrupt(digitalPinToInterrupt(2), ISR_INT0_vect, RISING); // przerwanie sw
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
-        power_spi_enable(); // SPI
+        wakeUp();
         bme_rozbieg = true;
       }
       else    // krotka kima
@@ -464,9 +461,7 @@ void loop() {
         #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
-        interrupts();
-        power_spi_enable(); // SPI
-        radio.powerUp();
+        wakeUp();
 
         #ifndef UNO
           //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
