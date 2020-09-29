@@ -53,7 +53,7 @@ RF24 radio(8, 9); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
 bool  whistle_connected = false;
 
-period_t sleeptime = SLEEP_500MS;
+period_t sleeptime = SLEEP_2S;
 time_t current_time;
 time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
 bool btn_state = LOW;
@@ -94,24 +94,43 @@ void prepareToSleep()
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
 
   power_adc_disable(); // ADC converter
+  //power_timer0_disable();// TIMER 0 SLEEP WDT ...
+  power_timer1_disable();// Timer 1
+  power_timer2_disable();// Timer 2
+
   #ifdef UNO
     power_usart0_enable();// Serial (USART) test
   #else
     power_usart0_disable();
   #endif
-  //power_timer0_disable();// TIMER 0 SLEEP WDT ...
-  power_timer1_disable();// Timer 1
-  power_timer2_disable();// Timer 2
-  power_twi_disable(); // TWI (I2C)
+
+  //power_twi_disable(); // TWI (I2C)
   
   //PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
-  radio.stopListening();
+  //radio.stopListening();
   radio.powerDown();// delay(5);
+  bme1.setMode(00);
+  bme1.end();
   power_spi_disable(); // SPI
+}
+
+void wakeUp()
+{
+  power_spi_enable(); // SPI
+  radio.powerUp();
 }
 
 void setup() {
   //clock_prescale_set(clock_div_1);
+
+  uc_state = UC_GO_SLEEP; // default uC state
+
+  bme1.beginSPI(10);
+  bme1.setMode(00);
+  bme1.end();
+  #ifdef DEBUGSERIAL
+    Serial.begin(115200);
+  #endif
   
   // wylacz WDT
   MCUSR= 0 ;
@@ -131,6 +150,7 @@ void setup() {
   power_timer2_disable();// Timer 2
 
   PORTD &= ~(1 << PD0);   // LOW pin0 CMT2110
+
 
   #ifndef UNO
     for (byte i = 0; i <= A5; i++)
@@ -153,14 +173,6 @@ void setup() {
     digitalWriteFast(SCK,HIGH);
   #endif
 
-  uc_state = UC_GO_SLEEP; // default uC state
-
-  bme1.beginSPI(10);
-
-  #ifdef DEBUGSERIAL
-    Serial.begin(115200);
-  #endif
-  
   radio.begin();
   radio.openWritingPipe(address);
   radio.enableAckPayload();
@@ -170,11 +182,8 @@ void setup() {
   radio.setChannel(95);
   radio.stopListening();
 
-  sleeptime = SLEEP_500MS;
+  sleeptime = SLEEP_2S;
   rf_repeat = 0;
-
-  pressure_read();      // odczyt z bme
-  pressure_prepare();   // rozbieg tablicy avg
 
   for(int i=0; i<8; i++)
   {
@@ -191,7 +200,9 @@ void loop()
         #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
-        interrupts();
+        //interrupts();
         power_spi_enable(); // SPI
-        radio.powerUp();
+        //radio.powerUp();
+        digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+        delay(2000);
 }
