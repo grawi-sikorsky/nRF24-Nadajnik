@@ -38,8 +38,8 @@ bool delegate_to_longsleep = false;
 struct outdata
 {
   int     sendgwizd = 2;
-  float   raw;
-  float   avg;
+  float   raw = 0;
+  float   avg = 0;
 };
 outdata nrfdata;
 
@@ -255,7 +255,7 @@ void loop()
       else    // krotka kima
       {
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(SLEEP_500MS,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(SLEEP_250MS,ADC_OFF,BOD_OFF);
         wakeUp();
 
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
@@ -292,6 +292,10 @@ void loop()
         if(input_2 == true)
         {
           nrfdata.sendgwizd = 5;
+        }
+        if(input_1 == true && input_2 == true)
+        {
+          nrfdata.sendgwizd = 6;
         }
         // powyzej do ogarniecia : 
         // np. oba jednoczesnie swieca
