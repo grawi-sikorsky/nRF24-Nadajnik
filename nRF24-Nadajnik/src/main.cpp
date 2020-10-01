@@ -21,16 +21,19 @@
 #define RF_REPEAT       6           // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
 #define RF_OFF_REPEAT   2           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
 
-bool input_1, input_2;    // info o wlaczonym wejsciu
+#define LIGHTSUP_PERIOD 4           // ilosc powtorzen przez ktore wysylamy RF po wlaczeniu swiatel, pozniej moga byc wlaczone ale nie wysylamy danych
+
+bool input_1, input_2, input_1_prev, input_2_prev;    // info o wlaczonym wejsciu
 bool lightsup;
+int lightsup_iter;
 
 RF24 radio(8, 9); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
 bool  whistle_connected = false;
 
-period_t sleeptime = SLEEP_120MS;
+period_t sleeptime = SLEEP_250MS;
 time_t current_time;
-time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
+
 
 bool device_in_longsleep = false;
 bool delegate_to_longsleep = false;
@@ -255,7 +258,7 @@ void loop()
       else    // krotka kima
       {
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(SLEEP_250MS,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
         wakeUp();
 
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
@@ -273,42 +276,74 @@ void loop()
         Serial.println(input_2);
       #endif
 
-      if(input_1 == true || input_2 == true)    // jesli wejscia sa aktywne [ LOW ]
+      if(input_1 != input_1_prev)
       {
-        lightsup = true;                        // flaga lightsup
-        delegate_to_longsleep = false;          // wylacz dlugi sen (od teraz odswieza sie co 500ms)
+        Serial.println("zmiana");
+        if(input_1 == true)
+        {
+          Serial.println("input1 true");
+          lightsup = true;                        // flaga lightsup
+          delegate_to_longsleep = false;          // wylacz dlugi sen (od teraz odswieza sie co 500ms)
+          lightsup_iter = 0;                      // przypisz czas wlaczenia
+        }
+        else
+        {
+          delegate_to_longsleep = true;
+          lightsup = false;
+        }
+
+        input_1_prev = input_1;
       }
-      else
+
+      if(input_2 != input_2_prev)
       {
-        lightsup = false;                       // jesli wejscia nieaktywne [ HIGH ] -> flaga lightsup=false
+        if(input_2 == true)
+        {
+          lightsup = true;                        // flaga lightsup
+          delegate_to_longsleep = false;          // wylacz dlugi sen (od teraz odswieza sie co 500ms)
+          lightsup_iter = 0;                      // przypisz czas wlaczenia
+        }
+        else
+        {
+          delegate_to_longsleep = true;
+          lightsup = false;
+        }
+        
+        input_2_prev = input_2;
       }
 
       if(lightsup == true)
       {
-        if(input_1 == true)
+        if(lightsup_iter < LIGHTSUP_PERIOD) 
         {
-          nrfdata.sendgwizd = 4;
+          lightsup_iter++;
+          Serial.println("wysylamy..");
+          if(input_1 == true)
+          {
+            nrfdata.sendgwizd = 4;
+          }
+          if(input_2 == true)
+          {
+            nrfdata.sendgwizd = 5;
+          }
+          if(input_1 == true && input_2 == true)
+          {
+            nrfdata.sendgwizd = 6;
+          }
+          SendRFData();                             // wyslij rf
+          delay(2);                                 // delay zeby serial sie odswiezyl
         }
-        if(input_2 == true)
+        else                                        // jesli input wciaz swieci a transmisja zostala juz nadana ->
         {
-          nrfdata.sendgwizd = 5;
+          sleeptime = SLEEP_1S;                     // zmniejsz odswiezanie w oczekiwaniu na wylaczenie input LEDow
         }
-        if(input_1 == true && input_2 == true)
-        {
-          nrfdata.sendgwizd = 6;
-        }
-        // powyzej do ogarniecia : 
-        // np. oba jednoczesnie swieca
-        // itp
-
-        SendRFData();                             // wyslij rf
-        delay(2);                                 // delay zeby serial sie odswiezyl
       }
-      else                                        // jesli lightsup = false idz w dluga kime 
+      else
       {
+        sleeptime = SLEEP_250MS;                    // domyslna wartosc -> uklad i tak idzie spadz w deep
         delegate_to_longsleep = true;
       }
-
+      
       uc_state = UC_GO_SLEEP;
       break;
     }
