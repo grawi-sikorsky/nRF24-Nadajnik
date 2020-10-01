@@ -17,15 +17,18 @@
 #define LIGHTS_INT      2 // PD2 INT0
 #define INPUT1          3 // PD3 INT1
 #define INPUT2          4 // PD4 
-
-#define RF_REPEAT       6           // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
-#define RF_OFF_REPEAT   2           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
+#define PICK_SIDE_INPUT 16  // PC2
 
 #define LIGHTSUP_PERIOD 4           // ilosc powtorzen przez ktore wysylamy RF po wlaczeniu swiatel, pozniej moga byc wlaczone ale nie wysylamy danych
+
+int INPUT1_RF_VAL = 11,
+    INPUT2_RF_VAL = 12,
+    BOTH_RF_VAL   = 13;
 
 bool input_1, input_2, input_1_prev, input_2_prev;    // info o wlaczonym wejsciu
 bool lightsup;
 int lightsup_iter;
+bool RightSide;                      // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
 
 RF24 radio(8, 9); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
@@ -217,6 +220,7 @@ void setup()
   pinModeFast(LIGHTS_INT,INPUT_PULLUP);
   pinModeFast(INPUT1,INPUT_PULLUP);
   pinModeFast(INPUT2,INPUT_PULLUP);
+  pinModeFast(PICK_SIDE_INPUT, INPUT_PULLUP); // zwora do masy
 
   radio.begin();
   radio.openWritingPipe(address);
@@ -225,12 +229,28 @@ void setup()
   radio.setDataRate(RF24_250KBPS);
   radio.setPALevel(RF24_PA_MAX);
   radio.setChannel(95);
-  radio.stopListening();
-
-  sleeptime = SLEEP_120MS;
+  radio.stopListening();  
 
   radio.powerDown();
 
+  sleeptime = SLEEP_120MS;
+
+
+  RightSide = !digitalReadFast(PICK_SIDE_INPUT);  // negacja bo do masy zwarte.
+
+  if(RightSide == true)
+  {
+    INPUT1_RF_VAL = 11;
+    INPUT2_RF_VAL = 12;
+    BOTH_RF_VAL   = 13;
+  }
+  else  // left side
+  {
+    INPUT1_RF_VAL = 21;
+    INPUT2_RF_VAL = 22;
+    BOTH_RF_VAL   = 23;
+  }
+  
   for(int i=0; i<8; i++)
   {
     digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
@@ -320,15 +340,15 @@ void loop()
           Serial.println("wysylamy..");
           if(input_1 == true)
           {
-            nrfdata.sendgwizd = 4;
+            nrfdata.sendgwizd = INPUT1_RF_VAL;
           }
           if(input_2 == true)
           {
-            nrfdata.sendgwizd = 5;
+            nrfdata.sendgwizd = INPUT2_RF_VAL;
           }
           if(input_1 == true && input_2 == true)
           {
-            nrfdata.sendgwizd = 6;
+            nrfdata.sendgwizd = BOTH_RF_VAL;
           }
           SendRFData();                             // wyslij rf
           delay(2);                                 // delay zeby serial sie odswiezyl
