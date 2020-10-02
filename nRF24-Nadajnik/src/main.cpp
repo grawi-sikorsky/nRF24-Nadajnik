@@ -36,7 +36,7 @@ tiny::BME280 bme1; //Uses I2C address 0x76 (jumper closed)
 // PRESSURE DEFINICJE I ZMIENNE
 #define BME_AVG_COUNT 20      // wiecej -> dluzszy powrot avg do normy
 #define BME_AVG_DIFF  800     // im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
-#define BME_AVG_SENS  200     // czulosc dmuchniecia
+#define BME_AVG_SENS  100     // czulosc dmuchniecia
 float bme_raw;                // dane raw z BME280
 float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
 float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
@@ -82,9 +82,9 @@ enum uc_State {
 };
 uc_State uc_state;
 
-//#define DEBUGSERIAL
+#define DEBUGSERIAL
 //#define DEBUG
-//#define UNO
+#define UNO
 
 /*****************************************************
  * Obsluga przerwania przycisku
@@ -161,9 +161,9 @@ void(* resetFunc) (void) = 0;//declare reset function at address 0
 // ODCZYTUJE Z BME
 void pressure_read()
 {
-  if(bme_rozbieg == true) delay(2);
+  if(bme_rozbieg == true) delay(1);           // delay bo????
 
-  bme_raw = bme1.readFixedPressure();        // Odczyt z czujnika bme
+  bme_raw = bme1.readFixedPressure();         // Odczyt z czujnika bme
   #ifdef DEBUGSERIAL
     //Serial.println(bme_raw);
   #endif
@@ -233,8 +233,6 @@ void manage_pressure()
   {
     bme_avg_i = 0;
   }
-    unsigned long start = micros();
-    // Call to your function
 
   bme_avg = 0;                          // zeruj srednia przed petla
   for(int i=0; i <= BME_AVG_COUNT; i++) // Usredniaj zgodnie z iloscia probek [BME_AVG_COUNT]
@@ -242,13 +240,6 @@ void manage_pressure()
     bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
   }
   bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
-
-  #ifdef DEBUGSERIAL
-    // Compute the time it took
-    unsigned long end = micros();
-    unsigned long delta = end - start;
-    Serial.print("czas: ");Serial.println(delta);
-  #endif
 }
 
 /*********************************************************************
@@ -270,6 +261,7 @@ void check_pressure()
     else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
     {
       nrfdata.sendgwizd = 2;
+      no_gwizd = false;
     }
   }
   if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
@@ -300,13 +292,10 @@ void check_pressure()
  * *******************************************************************/
 void manageTimeout()
 {
-  //current_positive = millis();  // pobierz czas.
-  //current_timeout = current_positive - last_positive;
-
   current_time = millis();
   giwzd_timeout = current_time - gwizd_start_at;
 
-  if(giwzd_timeout > TIME_TO_WAIT_MS && giwzd_timeout < TIMEOUT_1) // pierwszy prog
+  if(giwzd_timeout < TIMEOUT_1) // pierwszy prog
   {
     sleeptime = SLEEP_120MS;
   }
@@ -321,9 +310,9 @@ void manageTimeout()
     device_in_longsleep = true;
   }  
   #ifdef DEBUGSERIAL
-    Serial.print("gtimeout: "); Serial.println(giwzd_timeout);
-    Serial.print("gcur: "); Serial.println(current_time);
-    Serial.print("gat: "); Serial.println(gwizd_start_at);
+    //Serial.print("gtimeout: "); Serial.println(giwzd_timeout);
+    //Serial.print("gcur: "); Serial.println(current_time);
+    //Serial.print("gat: "); Serial.println(gwizd_start_at);
   #endif
 }
 
@@ -334,7 +323,7 @@ bool SendRFData()
 {
   bool result;
   result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
-
+  /*
   if(result)
   {
     if ( radio.isAckPayloadAvailable() ) 
@@ -362,6 +351,7 @@ bool SendRFData()
   }
 
   return whistle_connected;
+  */
 }
 
 void setup() 
@@ -389,7 +379,7 @@ void setup()
     Serial.begin(115200);
   #endif
 
-  #ifndef UNO
+  //#ifndef UNO
     for (byte i = 0; i <= A5; i++)
     {
       pinModeFast(i, OUTPUT);    // changed as per below
@@ -408,7 +398,7 @@ void setup()
     digitalWriteFast(MOSI,HIGH);
     digitalWriteFast(MISO,HIGH);
     digitalWriteFast(SCK,HIGH);
-  #endif
+  //#endif
 
   bme1.beginSPI(10);
 
@@ -482,8 +472,8 @@ void loop() {
         check_pressure();
 
         #ifdef DEBUGSERIAL
-          Serial.print("RAW: "); Serial.println(bme_raw);
-          Serial.print("AVG: "); Serial.println(bme_avg);
+          //Serial.print("nrfgwi: "); Serial.println(nrfdata.sendgwizd);
+          //Serial.print("AVG: "); Serial.println(bme_avg);
         #endif
         nrfdata.raw = bme_raw;
         nrfdata.avg = bme_avg;
