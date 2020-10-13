@@ -36,7 +36,7 @@ tiny::BME280 bme1; //Uses I2C address 0x76 (jumper closed)
 // PRESSURE DEFINICJE I ZMIENNE
 #define BME_AVG_COUNT 20      // wiecej -> dluzszy powrot avg do normy
 #define BME_AVG_DIFF  800     // im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
-#define BME_AVG_SENS  100     // czulosc dmuchniecia
+#define BME_AVG_SENS  50     // czulosc dmuchniecia
 float bme_raw;                // dane raw z BME280
 float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
 float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
