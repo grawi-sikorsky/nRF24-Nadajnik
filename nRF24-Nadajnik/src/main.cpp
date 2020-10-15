@@ -30,7 +30,7 @@ bool lightsup;
 int lightsup_iter;
 bool RightSide;                      // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
 
-RF24 radio(8, 9); // CE, CSN
+RF24 radio(9, 10); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
 bool  whistle_connected = false;
 
