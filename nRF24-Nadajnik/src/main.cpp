@@ -274,6 +274,7 @@ void check_pressure()
     #endif
 
     gwizd_on = true;                                  // ustaw gwizdek aktywny
+    no_gwizd = false;
     nrfdata.sendgwizd = 1;                            // dane do wysylki
     gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
   }
@@ -284,6 +285,8 @@ void check_pressure()
     #endif
     nrfdata.sendgwizd = 2;
     gwizd_on = false;                                 // flaga gwizdka rowniez OFF
+    no_gwizd = true;
+    rf_off_repeat = 0;
   }
 }
 #else
