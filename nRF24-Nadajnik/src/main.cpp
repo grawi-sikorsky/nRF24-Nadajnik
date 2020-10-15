@@ -20,13 +20,14 @@
 #define SW_RST_TIMEOUT  250          // czas w ktorym należy wykonac klikniecia dla RST
 #define SW_RST_COUNT    5             // ilosc nacisniec do wykonania resetu
 #define TIME_TO_WAIT_MS 5            // czas do nastepnego wyzwolenia????
-#define TIMEOUT_1       10000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
-#define TIMEOUT_2       30000//144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
-
-#define RF_SENDBACK     25          // ilosc transmisji nadawczych do odbioru powrotnej (musi byc identyczna z Odbiornikiem!)
+#define TIMEOUT_1       72000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
+#define TIMEOUT_2       144000//144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
 
 #define RF_REPEAT       6           // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
 #define RF_OFF_REPEAT   2           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
+
+#define GWIZD_2S                    // jesli zdefiniowany to nadajnik wysyla tylko 1 i ew 2 do odbiornika, ledy wylaczaja sie w odbiorniku po uplynieciu 2s
+                                    // jesli nie jest zdefiniowany, to nadajnik wysyla 1 gdy gwizd, nastepnie 0 aby wylaczyc ledy i 2 jako brak transmisji.
 
 // BME280 LIB
 #define TINY_BME280_SPI
@@ -85,6 +86,7 @@ uc_State uc_state;
 #define DEBUGSERIAL
 //#define DEBUG
 #define UNO
+
 
 /*****************************************************
  * Obsluga przerwania przycisku
@@ -249,6 +251,42 @@ void manage_pressure()
  * 1  - WLACZ WYJSCIA
  * 2  - BRAK TRANSMISJI [aby nie kolidowac z innym nadajnikiem]
  * *******************************************************************/
+#ifdef GWIZD_2S
+void check_pressure()
+{
+  if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
+  {
+    if(rf_off_repeat < RF_OFF_REPEAT)     //  jesli 
+    {
+      nrfdata.sendgwizd = 1;              // najpierw 0 jako informacja o wylaczeniu
+      rf_off_repeat++;
+    }
+    else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
+    {
+      nrfdata.sendgwizd = 2;
+      no_gwizd = false;
+    }
+  }
+  if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
+  {
+    #ifdef DEBUGSERIAL
+      Serial.println("GWIZD ON");
+    #endif
+
+    gwizd_on = true;                                  // ustaw gwizdek aktywny
+    nrfdata.sendgwizd = 1;                            // dane do wysylki
+    gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
+  }
+  else if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)) && gwizd_on == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
+  {
+    #ifdef DEBUGSERIAL
+      Serial.println("Gwizd OFF");
+    #endif
+    nrfdata.sendgwizd = 2;
+    gwizd_on = false;                                 // flaga gwizdka rowniez OFF
+  }
+}
+#else
 void check_pressure()
 {
   if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
@@ -286,7 +324,7 @@ void check_pressure()
     no_gwizd = true;
   }
 }
-
+#endif
 /*********************************************************************
  * Odlicza Czas do wylaczenia
  * *******************************************************************/
