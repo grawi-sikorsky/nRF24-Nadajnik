@@ -15,6 +15,8 @@
 // PINY
 #define LED_PIN         5
 #define LIGHTS_INT      2 // PD2 INT0
+#define LIGHTS_INT2     3 // PD3 INT1
+
 #define INPUT1          3 // PD3 INT1
 #define INPUT2          4 // PD4 
 #define PICK_SIDE_INPUT 16  // PC2
@@ -79,6 +81,14 @@ void LightsUp()
 void ISR_INT0_vect()
 {
   detachInterrupt(LIGHTS_INT);
+  detachInterrupt(LIGHTS_INT2);
+  LightsUp();
+}
+
+void ISR_INT1_vect()
+{
+  detachInterrupt(LIGHTS_INT);
+  detachInterrupt(LIGHTS_INT2);
   LightsUp();
 }
 
@@ -218,6 +228,7 @@ void setup()
   #endif
 
   pinModeFast(LIGHTS_INT,INPUT_PULLUP);
+  pinModeFast(LIGHTS_INT2,INPUT_PULLUP);
   pinModeFast(INPUT1,INPUT_PULLUP);
   pinModeFast(INPUT2,INPUT_PULLUP);
   pinModeFast(PICK_SIDE_INPUT, INPUT_PULLUP); // zwora do masy
@@ -267,10 +278,11 @@ void loop()
       if(delegate_to_longsleep == true)  // dluga kima
       {
         #ifdef DEBUGSERIAL
-          Serial.println("longsleep"); delay(500);
+          Serial.println("longsleep"); delay(5);
         #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        attachInterrupt(digitalPinToInterrupt(2), ISR_INT0_vect, RISING); // przerwanie sw
+        attachInterrupt(digitalPinToInterrupt(LIGHTS_INT), ISR_INT0_vect, FALLING); // przerwanie 1
+        attachInterrupt(digitalPinToInterrupt(LIGHTS_INT2), ISR_INT1_vect, FALLING); // przerwanie 2
         LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
         wakeUp();
         uc_state = UC_WAKE_AND_CHECK;
@@ -288,8 +300,11 @@ void loop()
 
     case UC_WAKE_AND_CHECK:
     {
-      input_1 = !digitalReadFast(INPUT1);   // przypisz negacje bo stan LOW to aktywne swiatlo
-      input_2 = !digitalReadFast(INPUT2);   // przypisz negacje bo stan LOW to aktywne swiatlo
+      //input_1 = !digitalReadFast(INPUT1);   // przypisz negacje bo stan LOW to aktywne swiatlo
+      //input_2 = !digitalReadFast(INPUT2);   // przypisz negacje bo stan LOW to aktywne swiatlo
+
+      input_1 = !digitalReadFast(LIGHTS_INT);   // przypisz negacje bo stan LOW to aktywne swiatlo
+      input_2 = !digitalReadFast(LIGHTS_INT2);   // przypisz negacje bo stan LOW to aktywne swiatlo
 
       #ifdef DEBUGSERIAL
         Serial.println(input_1);
