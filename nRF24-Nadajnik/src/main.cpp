@@ -83,9 +83,9 @@ enum uc_State {
 };
 uc_State uc_state;
 
-//#define DEBUGSERIAL
+#define DEBUGSERIAL
 //#define DEBUG
-//#define UNO
+#define UNO
 
 
 /*****************************************************
@@ -477,7 +477,7 @@ void loop() {
       if (delegate_to_longsleep == true)  // dluga kima
       {
         #ifdef DEBUGSERIAL
-          Serial.println("longsleep"); delay(500);
+          Serial.println("longsleep"); delay(20);
         #endif
         prepareToSleep(); // wylacza zbedne peryferia na czas snu
         attachInterrupt(digitalPinToInterrupt(2), ISR_INT0_vect, RISING); // przerwanie sw
@@ -514,7 +514,7 @@ void loop() {
 
         #ifdef DEBUGSERIAL
           //Serial.print("nrfgwi: "); Serial.println(nrfdata.sendgwizd);
-          //Serial.print("AVG: "); Serial.println(bme_avg);
+          Serial.print("AVG: "); Serial.println(bme_avg);
         #endif
         nrfdata.raw = bme_raw;
         nrfdata.avg = bme_avg;
