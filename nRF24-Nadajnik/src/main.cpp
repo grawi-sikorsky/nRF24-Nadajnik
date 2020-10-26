@@ -639,6 +639,16 @@ void loop() {
           digitalWriteFast(LED_PIN,LOW);
           uc_state = UC_GO_SLEEP;
         }
+
+        // do parowania z odbiornikiem!
+        // sprawdzamy czy po 1s od nacisniecia gwidka nie pojawilo sie dmuchniecie - jesli tak: parowanie.
+        if(current_time - btn_pressed_time >= 1000)
+        {
+          if(gwizd_on == true)
+          {
+            // funkcja parowania z odbiornikiem!
+          }
+        }
       }
       else
       {
