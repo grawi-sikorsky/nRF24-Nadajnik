@@ -59,9 +59,9 @@ enum uc_State {
 };
 uc_State uc_state;
 
-#define DEBUGSERIAL
+//#define DEBUGSERIAL
 //#define DEBUG
-#define UNO
+//#define UNO
 
 /*****************************************************
  * Obsluga przerwania przycisku
