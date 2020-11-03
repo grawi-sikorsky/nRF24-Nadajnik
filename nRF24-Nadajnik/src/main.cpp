@@ -343,7 +343,7 @@ void manageTimeout()
   else if(giwzd_timeout > TIMEOUT_1 && giwzd_timeout < TIMEOUT_2) // drugi prog
   {
     // zmniejsz probkowanie 2x/s
-    sleeptime = SLEEP_500MS; // 1S
+    sleeptime = SLEEP_250MS; // 1S
   } 
   else if(giwzd_timeout > TIMEOUT_2 )
   { 
