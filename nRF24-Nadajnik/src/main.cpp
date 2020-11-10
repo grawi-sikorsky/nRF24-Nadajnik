@@ -51,7 +51,7 @@ time_t gwizd_start_at, giwzd_timeout;        // timeout gwizd
 
 
 RF24 radio(8, 9); // CE, CSN
-const byte address[5] = "Odb1";  // domyslny adres odbiornika
+const byte address[][5] = {"Odb1","Odb2","Odb3","Odb4","Odb5"};  // domyslny adres odbiornika
 bool  whistle_connected = false;
 
 period_t sleeptime = SLEEP_120MS;
@@ -68,8 +68,8 @@ struct outdata
 {
   //int     ID_nadajnika;
   int     sendgwizd = 2;
-  float   raw;
-  float   avg;
+  int     addressID;
+  bool    change_address;
 };
 outdata nrfdata;
 
@@ -364,6 +364,7 @@ bool SendRFData()
 {
   bool result;
   result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
+  return result;
   /*
   if(result)
   {
@@ -444,7 +445,7 @@ void setup()
   bme1.beginSPI(10);
 
   radio.begin();
-  radio.openWritingPipe(address);
+  radio.openWritingPipe(address[0]);
   radio.enableAckPayload();
   radio.setRetries(1,8); // delay, count
   radio.setDataRate(RF24_250KBPS);
@@ -468,8 +469,9 @@ void setup()
     delay(50);
   }
 }
-
+  time_t time_tera;
 void loop() {
+/*
   switch(uc_state)
   {
     case UC_GO_SLEEP:
@@ -658,5 +660,33 @@ void loop() {
       break;
     }
   }
-  manageTimeout();
+  */
+  //manageTimeout();
+
+  
+  if(millis() - time_tera > 1000)
+  {
+    Serial.println("1s");
+    time_tera = millis();
+    wakeUp();
+
+
+    
+
+    if(SendRFData())
+    {
+      Serial.print("udalo sie wyslac na ID: "); Serial.println(nrfdata.addressID);
+
+      nrfdata.addressID = 1; //zmiana
+      radio.openWritingPipe(address[1]);
+      SendRFData();
+    }
+    else
+    {
+      Serial.println("Nie wyslano");
+      radio.openWritingPipe(address[nrfdata.addressID+1]);
+    }
+
+
+  }
 }
