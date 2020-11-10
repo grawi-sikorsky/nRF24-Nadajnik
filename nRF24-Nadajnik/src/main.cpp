@@ -240,7 +240,7 @@ void setup()
   radio.setDataRate(RF24_250KBPS);
   radio.setPALevel(RF24_PA_MAX);
   radio.setChannel(95);
-  radio.stopListening();  
+  radio.stopListening();
 
   radio.powerDown();
 
