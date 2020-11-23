@@ -83,9 +83,9 @@ enum uc_State {
 };
 uc_State uc_state;
 
-#define DEBUGSERIAL
+//#define DEBUGSERIAL
 //#define DEBUG
-#define UNO
+//#define UNO
 
 
 /*****************************************************
@@ -283,7 +283,7 @@ void check_pressure()
     #ifdef DEBUGSERIAL
       Serial.println("Gwizd OFF");
     #endif
-    nrfdata.sendgwizd = 2;
+    //nrfdata.sendgwizd = 2;
     gwizd_on = false;                                 // flaga gwizdka rowniez OFF
     no_gwizd = true;
     rf_off_repeat = 0;
@@ -445,7 +445,7 @@ void setup()
 
   radio.begin();
   radio.openWritingPipe(address);
-  radio.enableAckPayload();
+  //radio.enableAckPayload();
   radio.setRetries(1,8); // delay, count
   radio.setDataRate(RF24_250KBPS);
   radio.setPALevel(RF24_PA_MAX);
