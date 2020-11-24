@@ -235,7 +235,7 @@ void setup()
 
   radio.begin();
   radio.openWritingPipe(address);
-  radio.enableAckPayload();
+  //radio.enableAckPayload();
   radio.setRetries(1,8); // delay, count
   radio.setDataRate(RF24_250KBPS);
   radio.setPALevel(RF24_PA_MAX);
