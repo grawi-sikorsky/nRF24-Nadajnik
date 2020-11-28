@@ -182,7 +182,7 @@ bool SendRFData()
     }
     return whistle_connected;
   #endif
-  
+
   return result;
 }
 
@@ -316,10 +316,14 @@ void loop()
 
       if(input_1 != input_1_prev)
       {
-        Serial.println("zmiana");
+        #ifdef DEBUGSERIAL
+          Serial.println("zmiana");
+        #endif
         if(input_1 == true)
         {
-          Serial.println("input1 true");
+          #ifdef DEBUGSERIAL
+            Serial.println("input1 true");
+          #endif
           lightsup = true;                        // flaga lightsup
           delegate_to_longsleep = false;          // wylacz dlugi sen (od teraz odswieza sie co 500ms)
           lightsup_iter = 0;                      // przypisz czas wlaczenia
@@ -355,7 +359,9 @@ void loop()
         if(lightsup_iter < LIGHTSUP_PERIOD) 
         {
           lightsup_iter++;
-          Serial.println("wysylamy..");
+          #ifdef DEBUGSERIAL
+            Serial.println("wysylamy..");
+          #endif
           if(input_1 == true)
           {
             nrfdata.sendgwizd = INPUT1_RF_VAL;
