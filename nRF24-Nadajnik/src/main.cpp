@@ -154,33 +154,36 @@ bool SendRFData()
   bool result;
   result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
 
-  if(result)
-  {
-    if ( radio.isAckPayloadAvailable() ) 
+  #ifdef ACK_ON
+    if(result)
     {
-      radio.read(&ackOK, sizeof(ackOK));
-      whistle_connected = true;
-      #ifdef DEBUGSERIAL
-      Serial.print("ACK:"); Serial.println(ackOK);
-      #endif
+      if ( radio.isAckPayloadAvailable() ) 
+      {
+        radio.read(&ackOK, sizeof(ackOK));
+        whistle_connected = true;
+        #ifdef DEBUGSERIAL
+        Serial.print("ACK:"); Serial.println(ackOK);
+        #endif
+      }
+      else
+      {
+        whistle_connected = false;
+        #ifdef DEBUGSERIAL
+        Serial.println("ACK OK, no data");
+        #endif
+      }
     }
     else
     {
       whistle_connected = false;
-      #ifdef DEBUGSERIAL
-      Serial.println("ACK OK, no data");
-      #endif
+        #ifdef DEBUGSERIAL
+        Serial.println("NO ACK");
+        #endif
     }
-  }
-  else
-  {
-    whistle_connected = false;
-      #ifdef DEBUGSERIAL
-      Serial.println("NO ACK");
-      #endif
-  }
-
-  return whistle_connected;
+    return whistle_connected;
+  #endif
+  
+  return result;
 }
 
 void setup() 
