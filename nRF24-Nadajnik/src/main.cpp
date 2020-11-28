@@ -393,6 +393,7 @@ bool SendRFData()
 
   return whistle_connected;
   */
+  return result;
 }
 
 void setup() 
@@ -462,10 +463,10 @@ void setup()
   bme1.setMode(00);
   bme1.end();
 
-  for(int i=0; i<8; i++)
+  for(int i=0; i<6; i++)
   {
     digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-    delay(50);
+    delay(40);
   }
 }
 
