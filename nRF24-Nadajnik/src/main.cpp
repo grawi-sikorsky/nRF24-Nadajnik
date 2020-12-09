@@ -6,42 +6,41 @@
 #include <avr/wdt.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
-
-// SLEEP LIB
 #include "LowPower.h"
 
-// NRF DATA SENDGWIZD
+// ************************
+// NADAJNIK POMOCNICZY!
+// ************************
 
 // PINY
 #define LED_PIN         5
-#define LIGHTS_INT      2 // PD2 INT0
-#define LIGHTS_INT2     3 // PD3 INT1
+#define LIGHTS_INT      2   // PD2 INT0
+#define LIGHTS_INT2     3   // PD3 INT1
 
-#define INPUT1          3 // PD3 INT1
-#define INPUT2          4 // PD4 
+#define INPUT1          3   // PD3 INT1
+#define INPUT2          4   // PD4 
 #define PICK_SIDE_INPUT 16  // PC2
 
 #define LIGHTSUP_PERIOD 4           // ilosc powtorzen przez ktore wysylamy RF po wlaczeniu swiatel, pozniej moga byc wlaczone ale nie wysylamy danych
 
-int INPUT1_RF_VAL = 11,
-    INPUT2_RF_VAL = 12,
-    BOTH_RF_VAL   = 13;
+int INPUT1_RF_VAL = 11,             //  
+    INPUT2_RF_VAL = 12,             //  
+    BOTH_RF_VAL   = 13;             //  
 
 bool input_1, input_2, input_1_prev, input_2_prev;    // info o wlaczonym wejsciu
-bool lightsup;
-int lightsup_iter;
-bool RightSide;                      // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
+bool lightsup;                        
+int lightsup_iter;                    // ilosc powrotrzen sygnalu gdy wejscie jest wlaczone
+bool RightSide;                       // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
 
 RF24 radio(9, 10); // CE, CSN
 const byte address[5] = "Odb1";  // domyslny adres odbiornika
-bool  whistle_connected = false;
 
 period_t sleeptime = SLEEP_250MS;
 time_t current_time;
 
-
-bool device_in_longsleep = false;
 bool delegate_to_longsleep = false;
+bool whistle_connected = false;
+bool ackOK;
 
 struct outdata
 {
@@ -50,8 +49,6 @@ struct outdata
   float   avg = 0;
 };
 outdata nrfdata;
-
-bool ackOK;
 
 enum uc_State {
   UC_GO_SLEEP = 0,
@@ -69,10 +66,9 @@ uc_State uc_state;
 void LightsUp()
 {
   #ifdef DEBUGSERIAL
-  Serial.println("INTERRUPT");
+    Serial.println("INTERRUPT");
   #endif
-  // wlacz i przejdz do sprawdzenia swiatel
-  uc_state = UC_WAKE_AND_CHECK;
+  uc_state = UC_WAKE_AND_CHECK; // wlacz i przejdz do sprawdzenia swiatel
 }
 
 /*****************************************************
@@ -84,7 +80,6 @@ void ISR_INT0_vect()
   detachInterrupt(LIGHTS_INT2);
   LightsUp();
 }
-
 void ISR_INT1_vect()
 {
   detachInterrupt(LIGHTS_INT);
@@ -120,7 +115,7 @@ void prepareToSleep()
   #endif
 
   radio.stopListening();
-  radio.powerDown();// delay(5);
+  radio.powerDown();
   power_spi_disable(); // SPI
 }
 
@@ -129,13 +124,12 @@ void prepareToSleep()
  * ***************************************************/
 void softReset()
 {
-  //asm volatile ("  jmp 0");
   cli(); //irq's off
   wdt_enable(WDTO_60MS); //wd on,15ms
   while(1); //loop
 }
 
-void(* resetFunc) (void) = 0;//declare reset function at address 0
+void(* resetFunc) (void) = 0; //declare reset function at address 0
 
 
 /*********************************************************************
@@ -152,7 +146,7 @@ void manageTimeout()
 bool SendRFData()
 {
   bool result;
-  result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
+  result = radio.write(&nrfdata, sizeof(nrfdata));   // TRANSMISJA
 
   #ifdef ACK_ON
     if(result)
@@ -186,9 +180,9 @@ bool SendRFData()
   return result;
 }
 
-void setup() 
+void setup()
 {
-  uc_state = UC_GO_SLEEP; // default uC state
+  uc_state = UC_GO_SLEEP;   // domyslny stan uC po uruchomieniu
 
   // wylacz WDT
   MCUSR= 0 ;
@@ -249,7 +243,6 @@ void setup()
 
   sleeptime = SLEEP_120MS;
 
-
   RightSide = !digitalReadFast(PICK_SIDE_INPUT);  // negacja bo do masy zwarte.
 
   if(RightSide == true)
@@ -303,22 +296,16 @@ void loop()
 
     case UC_WAKE_AND_CHECK:
     {
-      //input_1 = !digitalReadFast(INPUT1);   // przypisz negacje bo stan LOW to aktywne swiatlo
-      //input_2 = !digitalReadFast(INPUT2);   // przypisz negacje bo stan LOW to aktywne swiatlo
-
       input_1 = !digitalReadFast(LIGHTS_INT);   // przypisz negacje bo stan LOW to aktywne swiatlo
       input_2 = !digitalReadFast(LIGHTS_INT2);   // przypisz negacje bo stan LOW to aktywne swiatlo
 
       #ifdef DEBUGSERIAL
-        Serial.println(input_1);
-        Serial.println(input_2);
+        Serial.print("INPUT1 state:"); Serial.println(input_1);
+        Serial.print("INPUT2 state:"); Serial.println(input_2);
       #endif
 
       if(input_1 != input_1_prev)
       {
-        #ifdef DEBUGSERIAL
-          Serial.println("zmiana");
-        #endif
         if(input_1 == true)
         {
           #ifdef DEBUGSERIAL
@@ -333,7 +320,6 @@ void loop()
           delegate_to_longsleep = true;
           lightsup = false;
         }
-
         input_1_prev = input_1;
       }
 
@@ -350,7 +336,6 @@ void loop()
           delegate_to_longsleep = true;
           lightsup = false;
         }
-        
         input_2_prev = input_2;
       }
 
@@ -384,7 +369,7 @@ void loop()
       }
       else
       {
-        sleeptime = SLEEP_250MS;                    // domyslna wartosc -> uklad i tak idzie spadz w deep
+        sleeptime = SLEEP_250MS;                    // domyslna wartosc -> uklad i tak idzie spac w deepsleep
         delegate_to_longsleep = true;
       }
       
