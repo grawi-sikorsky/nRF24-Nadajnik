@@ -6,9 +6,12 @@
 #include <avr/wdt.h>
 #include <avr/power.h>
 #include <avr/sleep.h>
-
-// SLEEP LIB
 #include "LowPower.h"
+
+//**************************
+//  NADAJNIK GWIZDEK
+//**************************
+
 
 // PINY
 #define LED_PIN         5
@@ -36,8 +39,8 @@ tiny::BME280 bme1; //Uses I2C address 0x76 (jumper closed)
 
 // PRESSURE DEFINICJE I ZMIENNE
 #define BME_AVG_COUNT 20      // wiecej -> dluzszy powrot avg do normy
-#define BME_AVG_DIFF  800     // im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
-#define BME_AVG_SENS  50     // czulosc dmuchniecia
+#define BME_AVG_DIFF  800     // Im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
+#define BME_AVG_SENS  50      // Czulosc dmuchniecia
 float bme_raw;                // dane raw z BME280
 float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
 float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
@@ -66,7 +69,6 @@ bool delegate_to_longsleep = false;
 
 struct outdata
 {
-  //int     ID_nadajnika;
   int     sendgwizd = 2;
   float   raw;
   float   avg;
@@ -96,9 +98,7 @@ void ButtonPressed()
   if(device_in_longsleep == true)  // jesli urzadzenie jest wylaczone
   {
     btn_pressed_time = millis();
-
-    // wlacz i przejdz do sprawdzenia stanu przycisku
-    uc_state = UC_BTN_CHECK;
+    uc_state = UC_BTN_CHECK;  // wlacz i przejdz do sprawdzenia stanu przycisku
   }
 }
 
@@ -149,26 +149,15 @@ void prepareToSleep()
 /*****************************************************
  * SW reset - dont reset peripherials
  * ***************************************************/
-void softReset()
-{
-  //asm volatile ("  jmp 0");
-  cli(); //irq's off
-  wdt_enable(WDTO_60MS); //wd on,15ms
-  while(1); //loop
-}
-
-void(* resetFunc) (void) = 0;//declare reset function at address 0
+void(* resetFunc) (void) = 0; //declare reset function at address 0
 
 
 // ODCZYTUJE Z BME
 void pressure_read()
 {
-  if(bme_rozbieg == true) delay(1);           // delay bo????
+  if(bme_rozbieg == true) delay(5);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
 
   bme_raw = bme1.readFixedPressure();         // Odczyt z czujnika bme
-  #ifdef DEBUGSERIAL
-    //Serial.println(bme_raw);
-  #endif
 }
 
 /*********************************************************************
@@ -177,10 +166,10 @@ void pressure_read()
  * *******************************************************************/
 void pressure_prepare()
 {
-  // START ODBIORU I USREDNIANIE DANYCH
+  // START I USREDNIANIE DANYCH
   for(int i=0; i < BME_AVG_COUNT; i++)  // w rozbiegu usredniaj wraz z rosnacym licznikiem i.
   {
-    bme_tbl[i] = bme_raw;      // przypisz dane z nadajnika x AVG COUNT
+    bme_tbl[i] = bme_raw;               // przypisz dane z nadajnika x AVG COUNT
     bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
   }
   bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
@@ -223,11 +212,13 @@ void manage_pressure()
   }
 
   // START USREDNIANIA DANYCH
+  // dopoki bme_avg_i jest mniejsze od ilosci probek BME_AVG_COUNT
+  // czy tu czasem nie jest o jedna wartosc mniej poprzez  < zamiast <= ?
   if(bme_avg_i < BME_AVG_COUNT)
   {
-    if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)))  // jesli obecne probka miesci sie w widelkach +-[BME_AVG_DIFF] 
+    if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)))  // jesli obecna probka miesci sie w widelkach +-[BME_AVG_DIFF] 
     {
-      bme_tbl[bme_avg_i] = bme_raw;  // dodaj nowa wartosc do tabeli
+      bme_tbl[bme_avg_i] = bme_raw;   // dodaj nowa wartosc do tabeli
       bme_avg_i++;                    // zwieksz licznik
     }
   }
@@ -350,11 +341,6 @@ void manageTimeout()
     delegate_to_longsleep = true;
     device_in_longsleep = true;
   }  
-  #ifdef DEBUGSERIAL
-    //Serial.print("gtimeout: "); Serial.println(giwzd_timeout);
-    //Serial.print("gcur: "); Serial.println(current_time);
-    //Serial.print("gat: "); Serial.println(gwizd_start_at);
-  #endif
 }
 
 // PIERWSZA TRANSMISJA Z ODBIOREM ID OD ODBIORNIKA
@@ -364,35 +350,7 @@ bool SendRFData()
 {
   bool result;
   result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
-  /*
-  if(result)
-  {
-    if ( radio.isAckPayloadAvailable() ) 
-    {
-      radio.read(&ackOK, sizeof(ackOK));
-      whistle_connected = true;
-      #ifdef DEBUGSERIAL
-      Serial.print("ACK:"); Serial.println(ackOK);
-      #endif
-    }
-    else
-    {
-      whistle_connected = false;
-      #ifdef DEBUGSERIAL
-      Serial.println("ACK OK, no data");
-      #endif
-    }
-  }
-  else
-  {
-    whistle_connected = false;
-      #ifdef DEBUGSERIAL
-      Serial.println("NO ACK");
-      #endif
-  }
 
-  return whistle_connected;
-  */
   return result;
 }
 
@@ -495,13 +453,6 @@ void loop() {
         LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
         wakeUp();
 
-        #ifndef UNO
-          //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          //delay(5);
-          //digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          //delay(25);
-        #endif
-
         uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
       }
       break;
@@ -538,7 +489,6 @@ void loop() {
     }
     case UC_WAITING_FOR_SENDBACK:
     {
-      //read_answer_from_receiver();
       break;
     }
     case UC_BTN_CHECK:
@@ -571,7 +521,6 @@ void loop() {
             digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
             delay(100);
           }
-          //softReset();
           resetFunc(); //call reset
         }
       }
@@ -650,6 +599,7 @@ void loop() {
             // funkcja parowania z odbiornikiem!
           }
         }
+        
       }
       else
       {
