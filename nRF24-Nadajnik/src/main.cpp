@@ -17,10 +17,15 @@
 #define LIGHTS_INT      2   // PD2 INT0
 #define LIGHTS_INT2     3   // PD3 INT1
 
-#define INPUT1          3   // PD3 INT1
-#define INPUT2          4   // PD4 
-#define PICK_SIDE_INPUT 16  // PC2
+// USTAWIENIA ADRESU
+#define ADDR1  5     // Zworka1 - ZW1
+#define ADDR2  6     // Zworka2 - ZW2
+#define ADDR3  7     // Zworka3 - ZW3
+bool addr1_State, addr2_State, addr3_State,
+    prev_addr1_State, prev_addr2_State, prev_addr3_State;
 
+
+#define PICK_SIDE_INPUT 16  // PC2
 #define LIGHTSUP_PERIOD 4           // ilosc powtorzen przez ktore wysylamy RF po wlaczeniu swiatel, pozniej moga byc wlaczone ale nie wysylamy danych
 
 int INPUT1_RF_VAL = 11,             //  
@@ -32,8 +37,9 @@ bool lightsup;
 int lightsup_iter;                    // ilosc powrotrzen sygnalu gdy wejscie jest wlaczone
 bool RightSide;                       // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
 
+byte address[][5] = {"Odb0","Odb1","Odb2","Odb3","Odb4","Odb5","Odb6","Odb7"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
+int address_nr = 1; // wybor adresu z tablicy powyzej
 RF24 radio(9, 10); // CE, CSN
-const byte address[5] = "Odb1";  // domyslny adres odbiornika
 
 period_t sleeptime = SLEEP_250MS;
 time_t current_time;
@@ -55,6 +61,8 @@ enum uc_State {
   UC_WAKE_AND_CHECK = 1,
 };
 uc_State uc_state;
+
+void manage_zworki();
 
 //#define DEBUGSERIAL
 //#define DEBUG
@@ -89,11 +97,13 @@ void ISR_INT1_vect()
 
 /*****************************************************
  * Uruchamia niezbedne peryferia po spaniu
+ * Dodatkowo sprawdza adres na zworkach
  * ***************************************************/
 void wakeUp()
 {
   power_spi_enable(); // SPI
   radio.powerUp();
+  manage_zworki();
 }
 
 /*****************************************************
@@ -122,13 +132,6 @@ void prepareToSleep()
 /*****************************************************
  * SW reset - dont reset peripherials
  * ***************************************************/
-void softReset()
-{
-  cli(); //irq's off
-  wdt_enable(WDTO_60MS); //wd on,15ms
-  while(1); //loop
-}
-
 void(* resetFunc) (void) = 0; //declare reset function at address 0
 
 
@@ -180,6 +183,45 @@ bool SendRFData()
   return result;
 }
 
+// POBIERA ADRES ZE ZWOREK I USTAWIA GO DLA RFki
+void setRFaddress()
+{
+  if(     addr1_State == false && addr2_State == false && addr3_State == false){address_nr = 0;}
+  else if(addr1_State == false && addr2_State == false && addr3_State == true){address_nr = 1;}
+  else if(addr1_State == false && addr2_State == true && addr3_State == false){address_nr = 2;}
+  else if(addr1_State == false && addr2_State == true && addr3_State == true){address_nr = 3;}
+  else if(addr1_State == true && addr2_State == false && addr3_State == false){address_nr = 4;}
+  else if(addr1_State == true && addr2_State == false && addr3_State == true){address_nr = 5;}
+  else if(addr1_State == true && addr2_State == true && addr3_State == false){address_nr = 6;}
+  else if(addr1_State == true && addr2_State == true && addr3_State == true){address_nr = 7;}
+
+  radio.openWritingPipe(address[address_nr]);
+  radio.stopListening();
+}
+
+// SPRAWDZA CZY NASTAPILA ZMIANA W ZWORKACH
+// JESLI TAK TO USTAWIA NOWY ADRES DLA ODBIORNIKA
+void manage_zworki()
+{
+  // NAJPIERW USTAWIAMY PULLUPY NA PINACH BO PO DEEPSLEEP SA WYLACZONE I DALSZY ODCZYT JEST BLEDNY!
+  pinModeFast(ADDR1, INPUT_PULLUP);
+  pinModeFast(ADDR2, INPUT_PULLUP);
+  pinModeFast(ADDR3, INPUT_PULLUP);
+
+  // ODCZYTUJEMY WARTOSCI ZE ZWOREK (ZW1 - ZW3) W URZADZENIU
+  addr1_State = !digitalReadFast(ADDR1);
+  addr2_State = !digitalReadFast(ADDR2);
+  addr3_State = !digitalReadFast(ADDR3);
+
+  if( addr1_State != prev_addr1_State || addr2_State != prev_addr2_State || addr3_State != prev_addr3_State )
+  {
+    prev_addr1_State = addr1_State;
+    prev_addr2_State = addr2_State;
+    prev_addr3_State = addr3_State;
+    setRFaddress();
+  } 
+}
+
 void setup()
 {
   uc_state = UC_GO_SLEEP;   // domyslny stan uC po uruchomieniu
@@ -223,15 +265,16 @@ void setup()
     digitalWriteFast(MISO,HIGH);
     digitalWriteFast(SCK,HIGH);
   #endif
-
+  
+  pinModeFast(ADDR1, INPUT_PULLUP);
+  pinModeFast(ADDR2, INPUT_PULLUP);
+  pinModeFast(ADDR3, INPUT_PULLUP);
   pinModeFast(LIGHTS_INT,INPUT_PULLUP);
   pinModeFast(LIGHTS_INT2,INPUT_PULLUP);
-  pinModeFast(INPUT1,INPUT_PULLUP);
-  pinModeFast(INPUT2,INPUT_PULLUP);
   pinModeFast(PICK_SIDE_INPUT, INPUT_PULLUP); // zwora do masy
 
   radio.begin();
-  radio.openWritingPipe(address);
+  radio.openWritingPipe(address[address_nr]);
   //radio.enableAckPayload();
   radio.setRetries(1,8); // delay, count
   radio.setDataRate(RF24_250KBPS);
@@ -239,10 +282,10 @@ void setup()
   radio.setChannel(95);
   radio.stopListening();
 
+  manage_zworki();
+
   radio.powerDown();
-
   sleeptime = SLEEP_120MS;
-
   RightSide = !digitalReadFast(PICK_SIDE_INPUT);  // negacja bo do masy zwarte.
 
   if(RightSide == true)
@@ -265,7 +308,7 @@ void setup()
   }
 }
 
-void loop() 
+void loop()
 {
   switch(uc_state)
   {
@@ -296,6 +339,7 @@ void loop()
 
     case UC_WAKE_AND_CHECK:
     {
+      //setRFaddress();
       input_1 = !digitalReadFast(LIGHTS_INT);   // przypisz negacje bo stan LOW to aktywne swiatlo
       input_2 = !digitalReadFast(LIGHTS_INT2);   // przypisz negacje bo stan LOW to aktywne swiatlo
 
