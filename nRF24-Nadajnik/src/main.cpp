@@ -7,6 +7,7 @@
 #include <avr/power.h>
 #include <avr/sleep.h>
 #include "LowPower.h"
+#include "EEPROM.h"
 
 //**************************
 //  NADAJNIK GWIZDEK
@@ -31,6 +32,8 @@
 
 #define GWIZD_2S                    // jesli zdefiniowany to nadajnik wysyla tylko 1 i ew 2 do odbiornika, ledy wylaczaja sie w odbiorniku po uplynieciu 2s
                                     // jesli nie jest zdefiniowany, to nadajnik wysyla 1 gdy gwizd, nastepnie 0 aby wylaczyc ledy i 2 jako brak transmisji.
+#define EEPROM_ADDRESS_PLACE  128   //
+
 
 // BME280 LIB
 #define TINY_BME280_SPI
@@ -54,12 +57,14 @@ time_t gwizd_start_at, giwzd_timeout;        // timeout gwizd
 
 
 RF24 radio(8, 9); // CE, CSN
-const byte address[5] = "Odb1";  // domyslny adres odbiornika
+byte address[][5] = {"Odb0","Odb1","Odb2","Odb3","Odb4","Odb5","Odb6","Odb7"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
+int address_nr = 0; // wybor adresu z tablicy powyzej
 bool  whistle_connected = false;
 
 period_t sleeptime = SLEEP_120MS;
 time_t current_time;
 time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
+time_t start_click_addr;
 bool btn_state = LOW;
 bool btn_last_state = LOW;
 int btn_rst_counter = 0;
@@ -353,6 +358,11 @@ bool SendRFData()
 
   return result;
 }
+// FUNKCJA USTAWIA ADRES NADAJNIKA GLOWNEGO KROKOWO CO JEDEN DALEJ
+void setRFaddress()
+{
+  
+}
 
 void setup() 
 {
@@ -403,7 +413,7 @@ void setup()
   bme1.beginSPI(10);
 
   radio.begin();
-  radio.openWritingPipe(address);
+  radio.openWritingPipe(address[address_nr]);
   //radio.enableAckPayload();
   radio.setRetries(1,8); // delay, count
   radio.setDataRate(RF24_250KBPS);
@@ -501,13 +511,14 @@ void loop() {
       btn_state = digitalReadFast(USER_SWITCH); // odczyt stanu guzika
       
       current_time = millis();
-
+      
       if(btn_state != btn_last_state) // jezeli stan przycisku sie zmienil
       {
         if(btn_state == HIGH)         // jezeli jest wysoki
         {
           btn_rst_counter++;          // licznik klikniec ++
           last_rst_click = current_time;  // zeruj timeout
+          start_click_addr = current_time;  // ustaw start klikniecia do zmiany adresu
         }
         if(current_time - last_rst_click >= SW_RST_TIMEOUT)
         {
@@ -525,10 +536,29 @@ void loop() {
         }
       }
 
+      // CZEK CZY KLIK I DMUCHNIECIE ADDRESS
+
+        // do parowania z odbiornikiem!
+        // sprawdzamy czy po 1s od nacisniecia gwidka nie pojawilo sie dmuchniecie - jesli tak: parowanie.
+      if(current_time - start_click_addr >= 500)
+      {
+        // funkcja parowania z odbiornikiem!
+        address_nr++;
+        radio.openWritingPipe(address[address_nr]);
+        EEPROM.update(EEPROM_ADDRESS_PLACE, address_nr);
+        for (int i = 0; i < (address_nr*2); i++)
+        {
+          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+          delay(250);
+        }
+        start_click_addr = millis();
+      }
+
       // jesli przycisk nie jest wcisniety lub zostal zwolniony
       if(btn_state == LOW)
       {
-        btn_pressed_time = current_time; // ustaw obecny czas
+        btn_pressed_time = current_time;  // ustaw obecny czas
+        start_click_addr = current_time;  // zeruj start timer dla zmiany adresu
         // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
       }
 
@@ -588,18 +618,7 @@ void loop() {
           delay(400);
           digitalWriteFast(LED_PIN,LOW);
           uc_state = UC_GO_SLEEP;
-        }
-
-        // do parowania z odbiornikiem!
-        // sprawdzamy czy po 1s od nacisniecia gwidka nie pojawilo sie dmuchniecie - jesli tak: parowanie.
-        if(current_time - btn_pressed_time >= 1000)
-        {
-          if(gwizd_on == true)
-          {
-            // funkcja parowania z odbiornikiem!
-          }
-        }
-        
+        }       
       }
       else
       {
