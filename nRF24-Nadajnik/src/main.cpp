@@ -410,6 +410,8 @@ void setup()
     digitalWriteFast(SCK,HIGH);
   //#endif
 
+  address_nr = EEPROM.read(EEPROM_ADDRESS_PLACE); // odczytaj z eeprom wartosc przed inicjalizacja nrfki
+
   bme1.beginSPI(10);
 
   radio.begin();
@@ -540,18 +542,24 @@ void loop() {
 
         // do parowania z odbiornikiem!
         // sprawdzamy czy po 1s od nacisniecia gwidka nie pojawilo sie dmuchniecie - jesli tak: parowanie.
-      if(current_time - start_click_addr >= 500)
+      if(current_time - start_click_addr >= 850 && current_time - start_click_addr <= 2400)
       {
-        // funkcja parowania z odbiornikiem!
-        address_nr++;
-        radio.openWritingPipe(address[address_nr]);
-        EEPROM.update(EEPROM_ADDRESS_PLACE, address_nr);
-        for (int i = 0; i < (address_nr*2); i++)
+        if(btn_state == LOW)
         {
-          digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-          delay(250);
+          // funkcja parowania z odbiornikiem!
+          if(address_nr < 7) { address_nr++; }
+          else { address_nr = 0; }
+
+          radio.openWritingPipe(address[address_nr]);
+          EEPROM.update(EEPROM_ADDRESS_PLACE, address_nr);
+
+          for (int i = 0; i < ((address_nr+1)*2); i++)
+          {
+            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+            delay(200);
+          }
+          start_click_addr = current_time = millis();
         }
-        start_click_addr = millis();
       }
 
       // jesli przycisk nie jest wcisniety lub zostal zwolniony
@@ -586,9 +594,27 @@ void loop() {
         {
           // pobudka
           btn_pressed_time = current_time;
-          digitalWriteFast(LED_PIN,HIGH);
-          delay(1000);
+
+          for(int i=0; i<192; i++)
+          {
+            analogWrite(LED_PIN, i);
+            delay(10);
+          }
+          for(int ip=0; ip<6; ip++)
+          {
+            for(int i=0; i<128; i++)
+            {
+              analogWrite(LED_PIN, i);
+              delayMicroseconds(500);
+            }
+            for(int i=128; i>0; i--)
+            {
+              analogWrite(LED_PIN, i);
+              delayMicroseconds(500);
+            }
+          }
           digitalWriteFast(LED_PIN,LOW);
+          analogWrite(LED_PIN, 0);
 
           device_in_longsleep = false;
 
@@ -609,14 +635,16 @@ void loop() {
         {
           // spij
           device_in_longsleep = true;
-          delegate_to_longsleep = true;          
-          digitalWriteFast(LED_PIN,HIGH);
-          delay(400);
+          delegate_to_longsleep = true;    
+
+          for(int i=192; i>0; i--)
+          {
+            analogWrite(LED_PIN, i);
+            delay(10);
+          }
           digitalWriteFast(LED_PIN,LOW);
-          delay(400);
-          digitalWriteFast(LED_PIN,HIGH);
-          delay(400);
-          digitalWriteFast(LED_PIN,LOW);
+          analogWrite(LED_PIN, 0);
+
           uc_state = UC_GO_SLEEP;
         }       
       }
