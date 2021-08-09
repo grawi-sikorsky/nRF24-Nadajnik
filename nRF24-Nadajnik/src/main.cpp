@@ -38,7 +38,7 @@ int lightsup_iter;                    // ilosc powrotrzen sygnalu gdy wejscie je
 bool RightSide;                       // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
 
 byte address[][5] = {"Odb0","Odb1","Odb2","Odb3","Odb4","Odb5","Odb6","Odb7"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
-int address_nr = 1; // wybor adresu z tablicy powyzej
+int address_nr = 0; // wybor adresu z tablicy powyzej
 RF24 radio(9, 10); // CE, CSN
 
 period_t sleeptime = SLEEP_250MS;
