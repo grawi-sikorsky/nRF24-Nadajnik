@@ -20,7 +20,7 @@ class Nadajnik{
         float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
         float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
         int   bme_avg_i = 0;          // licznik AVG
-        bool  bme_rozbieg = true;     // info o pierwszym wypelnianiu tabeli AVG
+        bool  bmeTableNeedsInitialization = true;     // info o pierwszym wypelnianiu tabeli AVG
         bool  gwizd_on    = false;    // info o aktywnym gwizdku
         bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
         int   rf_repeat   = 0;        // ilosc powtorzen transmisji do odbiornika
@@ -38,7 +38,7 @@ class Nadajnik{
         bool btn_last_state = LOW;
         int btn_rst_counter = 0;
 
-        bool device_in_longsleep = false;
+        bool deviceIsLongsleep = false;
         bool delegate_to_longsleep = false;
 
         struct outdata
@@ -97,7 +97,7 @@ class Nadajnik{
 
         /*********************************************************************
          * FUNKCJA CZYSZCZACA TABLICE Z PROBKAMI CISNIENIA
-         * USTAWIA BME_ROZBIEG NA TRUE!
+         * USTAWIA bmeTableNeedsInitialization NA TRUE!
          * *******************************************************************/
         void clearPressureAvg();
 
@@ -129,5 +129,8 @@ class Nadajnik{
 
         void setAddress(int address);
         int getAddress();
+
+        void setBmeTableNeedsInitialization(bool val);
+        void getBmeTableNeedsInitialization();
 
 };

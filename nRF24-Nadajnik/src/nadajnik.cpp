@@ -33,7 +33,7 @@ void Nadajnik::init(){
 }
 
 void Nadajnik::ButtonPressed(){
-  if(device_in_longsleep == true)  // jesli urzadzenie jest wylaczone
+  if(deviceIsLongsleep == true)  // jesli urzadzenie jest wylaczone
   {
     btn_pressed_time = millis();
     uc_state = UC_BTN_CHECK;  // wlacz i przejdz do sprawdzenia stanu przycisku
@@ -81,7 +81,7 @@ void Nadajnik::prepareToSleep()
  * ***************************************************/
 void Nadajnik::pressureRead()
 {
-  if(bme_rozbieg == true) delay(5);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
+  if(bmeTableNeedsInitialization == true) delay(5);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
 
   bme_raw = bme.readFixedPressure();         // Odczyt z czujnika bme
 }
@@ -99,7 +99,7 @@ void Nadajnik::pressureInitialize()
     bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
   }
   bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
-  bme_rozbieg = false;
+  bmeTableNeedsInitialization = false;
   bme_avg_i = 0;
 
   #ifdef DEBUGSERIAL
@@ -109,7 +109,7 @@ void Nadajnik::pressureInitialize()
 
 /*********************************************************************
  * FUNKCJA CZYSZCZACA TABLICE Z PROBKAMI CISNIENIA
- * USTAWIA BME_ROZBIEG NA TRUE!
+ * USTAWIA bmeTableNeedsInitialization NA TRUE!
  * *******************************************************************/
 void Nadajnik::clearPressureAvg()
 {
@@ -118,7 +118,7 @@ void Nadajnik::clearPressureAvg()
     bme_tbl[i] = 0;
   }
   bme_avg = bme_avg_i = 0;
-  bme_rozbieg = true;
+  bmeTableNeedsInitialization = true;
 }
 
 /*********************************************************************
@@ -128,7 +128,7 @@ void Nadajnik::clearPressureAvg()
 void Nadajnik::managePressure()
 {
   // ROZBIEG TABLICY SREDNIEGO CISNIENIA
-  if(bme_rozbieg == true)
+  if(bmeTableNeedsInitialization == true)
   {
     clearPressureAvg();
     pressureInitialize();
@@ -266,7 +266,7 @@ void Nadajnik::manageTimeout()
   else if(giwzd_timeout > TIMEOUT_2 )
   { 
     delegate_to_longsleep = true;
-    device_in_longsleep = true;
+    deviceIsLongsleep = true;
   }  
 }
 

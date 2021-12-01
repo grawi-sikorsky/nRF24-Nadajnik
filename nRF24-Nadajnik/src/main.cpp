@@ -18,19 +18,7 @@
 Nadajnik nadajnik;
 RF24 radio(8, 9); // CE, CSN
 
-// PRESSURE ZMIENNE
-float bme_raw;                // dane raw z BME280
-float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
-float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
-int   bme_avg_i = 0;          // licznik AVG
-bool  bme_rozbieg = true;     // info o pierwszym wypelnianiu tabeli AVG
-bool  gwizd_on    = false;    // info o aktywnym gwizdku
-bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
-int   rf_repeat   = 0;        // ilosc powtorzen transmisji do odbiornika
-int   rf_off_repeat = 0;      // ilosc powtorzen wysylki 0 (off) do odbiornika
 time_t gwizd_start_at, giwzd_timeout;        // timeout gwizd
-
-bool  whistle_connected = false;
 
 period_t sleeptime = SLEEP_120MS;
 time_t current_time;
@@ -39,9 +27,6 @@ time_t start_click_addr;
 bool btn_state = LOW;
 bool btn_last_state = LOW;
 int btn_rst_counter = 0;
-
-bool device_in_longsleep = false;
-bool delegate_to_longsleep = false;
 
 struct outdata
 {
@@ -154,7 +139,7 @@ void loop() {
         attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), isr_button, RISING); // przerwanie sw
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
         nadajnik.wakeUp();
-        bme_rozbieg = true;
+        nadajnik.setBmeTableNeedsInitialization(true);
       }
       else    // krotka kima
       {
@@ -271,7 +256,7 @@ void loop() {
       }
 
       // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
-      if(btn_state == LOW && device_in_longsleep == false)
+      if(btn_state == LOW && deviceIsLongsleep == false)
       {
         btn_pressed_time = current_time; // to wlasciwie mozna usunac na rzecz tego na gorze?
         // i od razu w krotka kime
@@ -280,15 +265,15 @@ void loop() {
       }
 
       // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
-      if(btn_state == LOW && device_in_longsleep == true)
+      if(btn_state == LOW && deviceIsLongsleep == true)
       {
-        device_in_longsleep = true;           // flaga off dla pewnosci
+        deviceIsLongsleep = true;           // flaga off dla pewnosci
         delegate_to_longsleep = true;   // deleguj do glebokiego snu
         uc_state = UC_GO_SLEEP;
       }
 
       // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
-      if(btn_state == HIGH && device_in_longsleep == true) // jesli guzik + nadajnik off
+      if(btn_state == HIGH && deviceIsLongsleep == true) // jesli guzik + nadajnik off
       {
         if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
         {
@@ -316,7 +301,7 @@ void loop() {
           digitalWriteFast(LED_PIN,LOW);
           analogWrite(LED_PIN, 0);
 
-          device_in_longsleep = false;
+          deviceIsLongsleep = false;
 
           // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
           // dlatego gwizd_start_at = teraz
@@ -329,12 +314,12 @@ void loop() {
       }
 
       // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
-      else if(btn_state == true && device_in_longsleep == false) // guzik + nadajnik ON
+      else if(btn_state == true && deviceIsLongsleep == false) // guzik + nadajnik ON
       {
         if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
         {
           // spij
-          device_in_longsleep = true;
+          deviceIsLongsleep = true;
           delegate_to_longsleep = true;    
 
           for(int i=192; i>0; i--)
