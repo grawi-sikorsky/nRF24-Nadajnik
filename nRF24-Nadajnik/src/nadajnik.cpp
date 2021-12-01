@@ -33,7 +33,7 @@ void Nadajnik::init(){
 }
 
 void Nadajnik::ButtonPressed(){
-  if(deviceIsLongsleep == true)  // jesli urzadzenie jest wylaczone
+  if(isLongsleep == true)  // jesli urzadzenie jest wylaczone
   {
     btn_pressed_time = millis();
     uc_state = UC_BTN_CHECK;  // wlacz i przejdz do sprawdzenia stanu przycisku
@@ -265,8 +265,8 @@ void Nadajnik::manageTimeout()
   } 
   else if(giwzd_timeout > TIMEOUT_2 )
   { 
-    delegate_to_longsleep = true;
-    deviceIsLongsleep = true;
+    goToLongsleep = true;
+    isLongsleep = true;
   }  
 }
 
@@ -288,3 +288,16 @@ int Nadajnik::getAddress(){
 void Nadajnik::setAddress(int address){
   pickedAddress = address;
 }
+
+// device longsleep state:
+void Nadajnik::setGoToLongsleep(bool val){
+  goToLongsleep = val;
+}
+
+bool Nadajnik::getGoToLongsleep(){
+  return goToLongsleep;
+}
+
+// sets device to go to longsleep in nex loop
+void Nadajnik::setToLongsleep(bool val) { isLongsleep = val; }
+bool Nadajnik::isLongsleep()         { return isLongsleep; }

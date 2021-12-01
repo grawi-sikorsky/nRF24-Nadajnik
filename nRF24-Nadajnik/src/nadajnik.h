@@ -38,8 +38,8 @@ class Nadajnik{
         bool btn_last_state = LOW;
         int btn_rst_counter = 0;
 
-        bool deviceIsLongsleep = false;
-        bool delegate_to_longsleep = false;
+        bool isLongsleep = false;       // device is in longsleep flag
+        bool goToLongsleep = false;     // sets device to go to longsleep in nex loop
 
         struct outdata
         {
@@ -131,6 +131,14 @@ class Nadajnik{
         int getAddress();
 
         void setBmeTableNeedsInitialization(bool val);
-        void getBmeTableNeedsInitialization();
+        bool getBmeTableNeedsInitialization();
+
+        // device longsleep state:
+        void setGoToLongsleep(bool val);
+        bool getGoToLongsleep();
+
+        // sets device to go to longsleep in nex loop
+        void setToLongsleep(bool val);
+        bool isLongsleep();
 
 };

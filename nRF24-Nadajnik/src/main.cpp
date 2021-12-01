@@ -130,7 +130,7 @@ void loop() {
   {
     case UC_GO_SLEEP:
     {
-      if (delegate_to_longsleep == true)  // dluga kima
+      if (nadajnik.getGoToLongsleep() == true)  // dluga kima
       {
         #ifdef DEBUGSERIAL
           Serial.println("longsleep"); delay(20);
@@ -190,7 +190,7 @@ void loop() {
     }
     case UC_BTN_CHECK:
     {
-      delegate_to_longsleep = false;  // inaczej pojdzie spac long
+      nadajnik.SetGoToLongsleep(false);  // inaczej pojdzie spac long
                                       // device_is_off pozostaje dla ustalenia czy 
                                       // nadajnik był wybudzony czy pracowal normalnie
 
@@ -256,7 +256,7 @@ void loop() {
       }
 
       // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
-      if(btn_state == LOW && deviceIsLongsleep == false)
+      if(btn_state == LOW && nadajnik.getGoToLongsleep() == false)
       {
         btn_pressed_time = current_time; // to wlasciwie mozna usunac na rzecz tego na gorze?
         // i od razu w krotka kime
@@ -265,15 +265,15 @@ void loop() {
       }
 
       // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
-      if(btn_state == LOW && deviceIsLongsleep == true)
+      if(btn_state == LOW && nadajnik.isLongsleep() == true)
       {
-        deviceIsLongsleep = true;           // flaga off dla pewnosci
-        delegate_to_longsleep = true;   // deleguj do glebokiego snu
+        nadajnik.setToLongsleep(true);           // flaga off dla pewnosci
+        nadajnik.setGoToLongsleep(true);   // deleguj do glebokiego snu
         uc_state = UC_GO_SLEEP;
       }
 
       // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
-      if(btn_state == HIGH && deviceIsLongsleep == true) // jesli guzik + nadajnik off
+      if(btn_state == HIGH && nadajnik.isLongsleep() == true) // jesli guzik + nadajnik off
       {
         if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
         {
