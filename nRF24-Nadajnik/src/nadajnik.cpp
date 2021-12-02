@@ -23,7 +23,7 @@ void Nadajnik::init(){
     radio.powerDown();
     
     sleeptime = SLEEP_120MS;
-    rf_repeat = 0;
+    repeatSending = 0;
 
     pressureRead();      // odczyt z bme
     pressureInitialize();   // inicjalizacja tablicy AVG
@@ -33,7 +33,7 @@ void Nadajnik::init(){
 }
 
 void Nadajnik::ButtonPressed(){
-  if(isLongsleep == true)  // jesli urzadzenie jest wylaczone
+  if(isInLongsleep == true)  // jesli urzadzenie jest wylaczone
   {
     btn_pressed_time = millis();
     uc_state = UC_BTN_CHECK;  // wlacz i przejdz do sprawdzenia stanu przycisku
@@ -81,9 +81,9 @@ void Nadajnik::prepareToSleep()
  * ***************************************************/
 void Nadajnik::pressureRead()
 {
-  if(bmeTableNeedsInitialization == true) delay(5);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
+  if(bmeTableNeedsInit == true) delay(5);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
 
-  bme_raw = bme.readFixedPressure();         // Odczyt z czujnika bme
+  bmeRaw = bme.readFixedPressure();         // Odczyt z czujnika bme
 }
 
 /*********************************************************************
@@ -95,30 +95,30 @@ void Nadajnik::pressureInitialize()
   // START I USREDNIANIE DANYCH
   for(int i=0; i < BME_AVG_COUNT; i++)  // w rozbiegu usredniaj wraz z rosnacym licznikiem i.
   {
-    bme_tbl[i] = bme_raw;               // przypisz dane z nadajnika x AVG COUNT
-    bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
+    bmeTable[i] = bmeRaw;               // przypisz dane z nadajnika x AVG COUNT
+    bmeAverage += bmeTable[i];              // dodaj do sredniej wartosc z tablicy[i]
   }
-  bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
-  bmeTableNeedsInitialization = false;
-  bme_avg_i = 0;
+  bmeAverage = bmeAverage / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
+  bmeTableNeedsInit = false;
+  bmeAverageIterator = 0;
 
   #ifdef DEBUGSERIAL
-    Serial.println(bme_avg);
+    Serial.println(bmeAverage);
   #endif
 }
 
 /*********************************************************************
  * FUNKCJA CZYSZCZACA TABLICE Z PROBKAMI CISNIENIA
- * USTAWIA bmeTableNeedsInitialization NA TRUE!
+ * USTAWIA bmeTableNeedsInit NA TRUE!
  * *******************************************************************/
 void Nadajnik::clearPressureAvg()
 {
   for (int i = 0; i < BME_AVG_COUNT; i++)
   {
-    bme_tbl[i] = 0;
+    bmeTable[i] = 0;
   }
-  bme_avg = bme_avg_i = 0;
-  bmeTableNeedsInitialization = true;
+  bmeAverage = bmeAverageIterator = 0;
+  bmeTableNeedsInit = true;
 }
 
 /*********************************************************************
@@ -128,7 +128,7 @@ void Nadajnik::clearPressureAvg()
 void Nadajnik::managePressure()
 {
   // ROZBIEG TABLICY SREDNIEGO CISNIENIA
-  if(bmeTableNeedsInitialization == true)
+  if(bmeTableNeedsInit == true)
   {
     clearPressureAvg();
     pressureInitialize();
@@ -138,27 +138,27 @@ void Nadajnik::managePressure()
   }
 
   // START USREDNIANIA DANYCH
-  // dopoki bme_avg_i jest mniejsze od ilosci probek BME_AVG_COUNT
+  // dopoki bmeAverageIterator jest mniejsze od ilosci probek BME_AVG_COUNT
   // czy tu czasem nie jest o jedna wartosc mniej poprzez  < zamiast <= ?
-  if(bme_avg_i < BME_AVG_COUNT)
+  if(bmeAverageIterator < BME_AVG_COUNT)
   {
-    if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)))  // jesli obecna probka miesci sie w widelkach +-[BME_AVG_DIFF] 
+    if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)))  // jesli obecna probka miesci sie w widelkach +-[BME_AVG_DIFF] 
     {
-      bme_tbl[bme_avg_i] = bme_raw;   // dodaj nowa wartosc do tabeli
-      bme_avg_i++;                    // zwieksz licznik
+      bmeTable[bmeAverageIterator] = bmeRaw;   // dodaj nowa wartosc do tabeli
+      bmeAverageIterator++;                    // zwieksz licznik
     }
   }
   else
   {
-    bme_avg_i = 0;
+    bmeAverageIterator = 0;
   }
 
-  bme_avg = 0;                          // zeruj srednia przed petla
+  bmeAverage = 0;                          // zeruj srednia przed petla
   for(int i=0; i <= BME_AVG_COUNT; i++) // Usredniaj zgodnie z iloscia probek [BME_AVG_COUNT]
   {
-    bme_avg += bme_tbl[i];              // dodaj do sredniej wartosc z tablicy[i]
+    bmeAverage += bmeTable[i];              // dodaj do sredniej wartosc z tablicy[i]
   }
-  bme_avg = bme_avg / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
+  bmeAverage = bmeAverage / BME_AVG_COUNT;    // dzielimy przez ilosc zapisanych wartosci w tablicy
 }
 
 /*********************************************************************
@@ -173,10 +173,10 @@ void Nadajnik::checkPressure()
 {
   if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
   {
-    if(rf_off_repeat < RF_OFF_REPEAT)     //  jesli 
+    if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
     {
       nrfdata.sendgwizd = 1;              // najpierw 0 jako informacja o wylaczeniu
-      rf_off_repeat++;
+      repeatSendingOffMsg++;
     }
     else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
     {
@@ -184,26 +184,26 @@ void Nadajnik::checkPressure()
       no_gwizd = false;
     }
   }
-  if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
+  if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
   {
     #ifdef DEBUGSERIAL
       Serial.println("GWIZD ON");
     #endif
 
-    gwizd_on = true;                                  // ustaw gwizdek aktywny
+    sendSignal = true;                                  // ustaw gwizdek aktywny
     no_gwizd = false;
     nrfdata.sendgwizd = 1;                            // dane do wysylki
     gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
   }
-  else if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)) && gwizd_on == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
+  else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
   {
     #ifdef DEBUGSERIAL
       Serial.println("Gwizd OFF");
     #endif
     //nrfdata.sendgwizd = 2;
-    gwizd_on = false;                                 // flaga gwizdka rowniez OFF
+    sendSignal = false;                                 // flaga gwizdka rowniez OFF
     no_gwizd = true;
-    rf_off_repeat = 0;
+    repeatSendingOffMsg = 0;
   }
 }
 #else
@@ -211,10 +211,10 @@ void check_pressure()
 {
   if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
   {
-    if(rf_off_repeat < RF_OFF_REPEAT)     //  jesli 
+    if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
     {
       nrfdata.sendgwizd = 0;              // najpierw 0 jako informacja o wylaczeniu
-      rf_off_repeat++;
+      repeatSendingOffMsg++;
     }
     else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
     {
@@ -222,25 +222,25 @@ void check_pressure()
       no_gwizd = false;
     }
   }
-  if(bme_raw > (bme_avg + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
+  if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
   {
     #ifdef DEBUGSERIAL
       Serial.println("GWIZD ON");
     #endif
 
-    gwizd_on = true;                                  // ustaw gwizdek aktywny
+    sendSignal = true;                                  // ustaw gwizdek aktywny
     no_gwizd = false;                                 // ustaw brak transmisji jako nieprawda
     nrfdata.sendgwizd = 1;                            // dane do wysylki
     gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
   }
-  else if((bme_raw < (bme_avg + BME_AVG_DIFF)) && (bme_raw > (bme_avg - BME_AVG_DIFF)) && gwizd_on == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
+  else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
   {
     #ifdef DEBUGSERIAL
       Serial.println("Gwizd OFF");
     #endif
     nrfdata.sendgwizd = 0;
-    gwizd_on = false;                                 // flaga gwizdka rowniez OFF
-    rf_off_repeat = 0;                                // zeruj licznik powtorzen wysylki 0
+    sendSignal = false;                                 // flaga gwizdka rowniez OFF
+    repeatSendingOffMsg = 0;                                // zeruj licznik powtorzen wysylki 0
     no_gwizd = true;
   }
 }
@@ -251,8 +251,8 @@ void check_pressure()
  * *******************************************************************/
 void Nadajnik::manageTimeout()
 {
-  current_time = millis();
-  giwzd_timeout = current_time - gwizd_start_at;
+  currentTime = millis();
+  giwzd_timeout = currentTime - gwizd_start_at;
 
   if(giwzd_timeout < TIMEOUT_1) // pierwszy prog
   {
@@ -266,7 +266,7 @@ void Nadajnik::manageTimeout()
   else if(giwzd_timeout > TIMEOUT_2 )
   { 
     goToLongsleep = true;
-    isLongsleep = true;
+    isInLongsleep = true;
   }  
 }
 
@@ -281,6 +281,14 @@ bool Nadajnik::SendRFData()
   return result;
 }
 
+/*********************************************************************
+ * Obsluga przycisku i jego akcji
+ * *******************************************************************/
+void Nadajnik::manageButton(){
+  
+}
+
+
 int Nadajnik::getAddress(){
   return pickedAddress;
 }
@@ -289,15 +297,26 @@ void Nadajnik::setAddress(int address){
   pickedAddress = address;
 }
 
-// device longsleep state:
-void Nadajnik::setGoToLongsleep(bool val){
-  goToLongsleep = val;
-}
-
-bool Nadajnik::getGoToLongsleep(){
-  return goToLongsleep;
-}
+void Nadajnik::setBmeTableNeedsInitialization(bool val) { bmeTableNeedsInit = val; }
+bool Nadajnik::getBmeTableNeedsInitialization() { return bmeTableNeedsInit; }
 
 // sets device to go to longsleep in nex loop
-void Nadajnik::setToLongsleep(bool val) { isLongsleep = val; }
-bool Nadajnik::isLongsleep()         { return isLongsleep; }
+void Nadajnik::setGoToLongsleep(bool val){ goToLongsleep = val; }
+bool Nadajnik::getGoToLongsleep(){ return goToLongsleep; }
+
+// device longsleep state:
+void Nadajnik::setIsLongsleep(bool val){ isInLongsleep = val; }
+bool Nadajnik::isLongsleep(){ return isInLongsleep; }
+
+// 
+void Nadajnik::setSendSignal(bool val){ sendSignal = val; }
+bool Nadajnik::getSendSignalState(){ return sendSignal; }
+
+void Nadajnik::setRepeatSending(int iterations) { repeatSending = iterations; }
+int Nadajnik::getRepeatSending() { return repeatSending; }
+
+float Nadajnik::getBmeRawData(){ return bmeRaw; }
+
+float Nadajnik::getBmeAverage(){ return bmeAverage; }
+
+time_t Nadajnik::getCurrentTime(){ return currentTime = millis(); }

@@ -16,30 +16,31 @@ class Nadajnik{
 
     private:
         // PRESSURE ZMIENNE
-        float bme_raw;                // dane raw z BME280
-        float bme_tbl[BME_AVG_COUNT+1]; // tablica z probkami cisnienia 
-        float bme_avg = 0;            // srednie cisnienie -> bme_avg / BME_AVG_COUNT
-        int   bme_avg_i = 0;          // licznik AVG
-        bool  bmeTableNeedsInitialization = true;     // info o pierwszym wypelnianiu tabeli AVG
-        bool  gwizd_on    = false;    // info o aktywnym gwizdku
+        float bmeRaw;                       // dane raw z BME280
+        float bmeTable[BME_AVG_COUNT+1];    // tablica z probkami cisnienia
+        bool  bmeTableNeedsInit = true;     // info o pierwszym wypelnianiu tabeli AVG
+        float bmeAverage = 0;               // srednie cisnienie -> bme_avg / BME_AVG_COUNT
+        int   bmeAverageIterator = 0;       // licznik AVG
+
+        bool  sendSignal  = false;    // info o aktywnym gwizdku
         bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
-        int   rf_repeat   = 0;        // ilosc powtorzen transmisji do odbiornika
-        int   rf_off_repeat = 0;      // ilosc powtorzen wysylki 0 (off) do odbiornika
+        int   repeatSending   = 0;    // ilosc powtorzen transmisji do odbiornika
+        int   repeatSendingOffMsg = 0;      // ilosc powtorzen wysylki 0 (off) do odbiornika
         time_t gwizd_start_at, giwzd_timeout;        // timeout gwizd
 
         int pickedAddress = 0;              // wybor adresu z tablicy powyzej
         bool  whistle_connected = false;
 
         period_t sleeptime = SLEEP_120MS;
-        time_t current_time;
+        time_t currentTime;
         time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
         time_t start_click_addr;
-        bool btn_state = LOW;
-        bool btn_last_state = LOW;
-        int btn_rst_counter = 0;
+        bool buttonState = LOW;
+        bool buttonLastState = LOW;
+        int buttonClickCount = 0;
 
-        bool isLongsleep = false;       // device is in longsleep flag
-        bool goToLongsleep = false;     // sets device to go to longsleep in nex loop
+        bool isInLongsleep = false;         // device is in longsleep flag
+        bool goToLongsleep = false;         // sets device to go to longsleep in nex loop
 
         struct outdata
         {
@@ -126,6 +127,11 @@ class Nadajnik{
          * *******************************************************************/
         bool SendRFData();
 
+        /*********************************************************************
+         * Obsluga przycisku i jego akcji
+         * *******************************************************************/
+        void manageButton();
+
 
         void setAddress(int address);
         int getAddress();
@@ -133,12 +139,24 @@ class Nadajnik{
         void setBmeTableNeedsInitialization(bool val);
         bool getBmeTableNeedsInitialization();
 
-        // device longsleep state:
+        // sets device to go to longsleep in nex loop
         void setGoToLongsleep(bool val);
         bool getGoToLongsleep();
-
-        // sets device to go to longsleep in nex loop
-        void setToLongsleep(bool val);
+        
+        // device longsleep state:
+        void setIsLongsleep(bool val);
         bool isLongsleep();
+
+        void setSendSignal(bool val);
+        bool getSendSignalState();
+
+        void setRepeatSending(int iterations);
+        int getRepeatSending();
+        
+        float getBmeRawData();
+        float getBmeAverage();
+
+        time_t getCurrentTime();
+
 
 };
