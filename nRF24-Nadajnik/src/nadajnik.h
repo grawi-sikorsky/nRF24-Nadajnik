@@ -8,9 +8,9 @@
 #include <avr/power.h>
 #include <avr/sleep.h>
 
-
-
 byte const addressList[][5] = {"Odb0","Odb1","Odb2","Odb3","Odb4","Odb5","Odb6","Odb7"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
+
+
 
 class Nadajnik{
 
@@ -52,18 +52,19 @@ class Nadajnik{
 
         bool ackOK;
 
+    public:
+
         enum uc_State {
-        UC_GO_SLEEP = 0,
-        UC_WAKE_AND_CHECK = 1,
-        UC_WAITING_FOR_SENDBACK = 2,
-        UC_BTN_CHECK  = 3,
+            UC_GO_SLEEP = 0,
+            UC_WAKE_AND_CHECK = 1,
+            UC_BTN_CHECK  = 2,
         };
         uc_State uc_state;
 
-    public:
-
         // wiadomo..
         void init();
+
+        void reset();
 
         /*****************************************************
          * Obsluga przerwania przycisku
@@ -157,6 +158,10 @@ class Nadajnik{
         float getBmeAverage();
 
         time_t getCurrentTime();
+
+        period_t getSleepTime();
+
+        uc_State getState();
 
 
 };

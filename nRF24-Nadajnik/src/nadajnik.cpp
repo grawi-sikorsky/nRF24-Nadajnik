@@ -1,5 +1,7 @@
 #include "nadajnik.h"
 #include "configuration.h"
+#include <digitalWriteFast.h>
+#include "EEPROM.h"
 
 // BME280 LIB
 #define TINY_BME280_SPI
@@ -7,6 +9,12 @@
 tiny::BME280 bme;
 
 extern RF24 radio; // CE, CSN
+
+/*****************************************************
+ * SW reset - dont reset peripherials
+ * ***************************************************/
+void(* resetFunc) (void) = 0; //declare reset function at address 0
+
 
 void Nadajnik::init(){
 
@@ -127,14 +135,11 @@ void Nadajnik::clearPressureAvg()
  * *******************************************************************/
 void Nadajnik::managePressure()
 {
-  // ROZBIEG TABLICY SREDNIEGO CISNIENIA
+  // Inicjalizacja TABLICY USREDNIONEGO CISNIENIA
   if(bmeTableNeedsInit == true)
   {
     clearPressureAvg();
     pressureInitialize();
-    #ifdef DEBUGSERIAL
-      Serial.println("pressure prepare");
-    #endif
   }
 
   // START USREDNIANIA DANYCH
@@ -173,16 +178,16 @@ void Nadajnik::checkPressure()
 {
   if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
   {
-    if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
-    {
-      nrfdata.sendgwizd = 1;              // najpierw 0 jako informacja o wylaczeniu
-      repeatSendingOffMsg++;
-    }
-    else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
-    {
-      nrfdata.sendgwizd = 2;
-      no_gwizd = false;
-    }
+    // if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
+    // {
+    //   nrfdata.sendgwizd = 1;              // najpierw 0 jako informacja o wylaczeniu
+    //   repeatSendingOffMsg++;
+    // }
+    // else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
+    // {
+    //   nrfdata.sendgwizd = 2;
+    //   no_gwizd = false;
+    // }
   }
   if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
   {
@@ -285,7 +290,147 @@ bool Nadajnik::SendRFData()
  * Obsluga przycisku i jego akcji
  * *******************************************************************/
 void Nadajnik::manageButton(){
-  
+
+      buttonLastState = buttonState;                // do rst
+      buttonState = digitalReadFast(BUTTON_PIN);    // odczyt stanu guzika
+      
+      currentTime = millis();
+      
+      if(buttonState != buttonLastState) // jezeli stan przycisku sie zmienil
+      {
+        if(buttonState == HIGH)         // jezeli jest wysoki
+        {
+          buttonClickCount++;          // licznik klikniec ++
+          last_rst_click = currentTime;  // zeruj timeout
+          start_click_addr = currentTime;  // ustaw start klikniecia do zmiany adresu
+        }
+        if(currentTime - last_rst_click >= SW_RST_TIMEOUT)
+        {
+          buttonClickCount = 0;
+          last_rst_click = currentTime;
+        }
+        if(buttonClickCount >= SW_RST_COUNT)
+        {
+          for(int i=0; i<12; i++)
+          {
+            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+            delay(100);
+          }
+          resetFunc(); //call reset
+        }
+      }
+
+
+      // CHECK IF BUTTON IS PRESSED FOR ADDRESS CHANGE (BETWEEN 850 & 2400 ms)
+      if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
+      {
+        if(buttonState == LOW)
+        {
+          // funkcja parowania z odbiornikiem!
+          if(pickedAddress < 7) { pickedAddress++; }
+          else { pickedAddress = 0; }
+
+          radio.openWritingPipe(addressList[ pickedAddress ]);
+          EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
+
+          for (int i = 0; i < ((pickedAddress+1)*2); i++)
+          {
+            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+            delay(200);
+          }
+          start_click_addr = currentTime = millis();
+        }
+      }
+
+      // jesli przycisk nie jest wcisniety lub zostal zwolniony
+      if(buttonState == LOW)
+      {
+        btn_pressed_time = currentTime;  // ustaw obecny czas
+        start_click_addr = currentTime;  // zeruj start timer dla zmiany adresu
+        // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
+      }
+
+      // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
+      if(buttonState == LOW && isInLongsleep == true)
+      {
+        isInLongsleep = true;
+        goToLongsleep = true;
+        uc_state = UC_GO_SLEEP;
+      }
+
+      // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
+      if(buttonState == HIGH && isInLongsleep == true) // jesli guzik + nadajnik off
+      {
+        if(currentTime - btn_pressed_time >= SWITCH_TIMEOUT)
+        {
+          // pobudka
+          btn_pressed_time = currentTime;
+
+          for(int i=0; i<192; i++)
+          {
+            analogWrite(LED_PIN, i);
+            delay(10);
+          }
+          for(int ip=0; ip<6; ip++)
+          {
+            for(int i=0; i<128; i++)
+            {
+              analogWrite(LED_PIN, i);
+              delayMicroseconds(500);
+            }
+            for(int i=128; i>0; i--)
+            {
+              analogWrite(LED_PIN, i);
+              delayMicroseconds(500);
+            }
+          }
+          digitalWriteFast(LED_PIN,LOW);
+          analogWrite(LED_PIN, 0);
+
+          isInLongsleep = false;
+
+          // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
+          // dlatego gwizd_start_at = teraz
+          gwizd_start_at = currentTime; 
+
+          detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
+          uc_state = UC_WAKE_AND_CHECK;
+        }
+        //uc_state = UC_GO_SLEEP;// nowe - przemyslec!
+      }
+
+      // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
+      else if(buttonState == true && isInLongsleep == false) // guzik + nadajnik ON
+      {
+        if(currentTime - btn_pressed_time >= SWITCH_TIMEOUT)
+        {
+          // spij
+          isInLongsleep = true;
+          goToLongsleep = true;
+
+          for(int i=192; i>0; i--)
+          {
+            analogWrite(LED_PIN, i);
+            delay(10);
+          }
+          digitalWriteFast(LED_PIN,LOW);
+          analogWrite(LED_PIN, 0);
+
+          uc_state = UC_GO_SLEEP;
+        }       
+      }
+      else
+      {
+        // yyyyy...
+      }
+
+      // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
+      if(buttonState == LOW && goToLongsleep  == false)
+      {
+        btn_pressed_time = currentTime; // to wlasciwie mozna usunac na rzecz tego na gorze?
+        // i od razu w krotka kime
+        uc_state = UC_GO_SLEEP;
+      }
 }
 
 
@@ -320,3 +465,8 @@ float Nadajnik::getBmeRawData(){ return bmeRaw; }
 float Nadajnik::getBmeAverage(){ return bmeAverage; }
 
 time_t Nadajnik::getCurrentTime(){ return currentTime = millis(); }
+
+period_t Nadajnik::getSleepTime(){ return sleeptime; }
+
+Nadajnik::uc_State Nadajnik::getState(){ return uc_state; }
+

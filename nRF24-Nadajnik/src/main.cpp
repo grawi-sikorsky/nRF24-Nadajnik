@@ -18,16 +18,6 @@
 Nadajnik nadajnik;
 RF24 radio(8, 9); // CE, CSN
 
-time_t gwizd_start_at, giwzd_timeout;        // timeout gwizd
-
-period_t sleeptime = SLEEP_120MS;
-time_t current_time;
-time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
-time_t start_click_addr;
-bool btn_state = LOW;
-bool btn_last_state = LOW;
-int btn_rst_counter = 0;
-
 struct outdata
 {
   int     sendgwizd = 2;
@@ -35,14 +25,6 @@ struct outdata
   float   avg;
 };
 outdata nrfdata;
-
-enum uc_State {
-  UC_GO_SLEEP = 0,
-  UC_WAKE_AND_CHECK = 1,
-  UC_WAITING_FOR_SENDBACK = 2,
-  UC_BTN_CHECK  = 3,
-};
-uc_State uc_state;
 
 //#define DEBUGSERIAL
 //#define DEBUG
@@ -55,10 +37,6 @@ void isr_button() {
   nadajnik.ButtonPressed();
 }
 
-/*****************************************************
- * SW reset - dont reset peripherials
- * ***************************************************/
-void(* resetFunc) (void) = 0; //declare reset function at address 0
 
 
 /*****************************************************
@@ -66,7 +44,7 @@ void(* resetFunc) (void) = 0; //declare reset function at address 0
  * ***************************************************/
 void setup() 
 {
-  uc_state = UC_GO_SLEEP; // default uC state
+  nadajnik.uc_state = nadajnik.UC_GO_SLEEP; // default uC state
 
   // wylacz WDT
   MCUSR= 0 ;
@@ -124,45 +102,36 @@ void setup()
  * LOOP
  * ***************************************************/
 void loop() {
-  switch(uc_state)
+  switch(nadajnik.uc_state)
   {
-    case UC_GO_SLEEP:
+    case nadajnik.UC_GO_SLEEP:
     {
       if (nadajnik.getGoToLongsleep() == true)  // dluga kima
       {
-        #ifdef DEBUGSERIAL
-          Serial.println("longsleep"); delay(20);
-        #endif
         nadajnik.prepareToSleep(); // wylacza zbedne peryferia na czas snu
         attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), isr_button, RISING); // przerwanie sw
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
+        // here sleeping ->
         nadajnik.wakeUp();
         nadajnik.setBmeTableNeedsInitialization(true);
       }
       else    // krotka kima
       {
-        #ifdef DEBUGSERIAL
-          //Serial.println("shortsleep"); delayMicroseconds(850);
-        #endif
         nadajnik.prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        LowPower.powerDown(sleeptime,ADC_OFF,BOD_OFF);
+        LowPower.powerDown(nadajnik.getSleepTime(), ADC_OFF, BOD_OFF);
         nadajnik.wakeUp();
 
-        uc_state = UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
+        nadajnik.uc_state = nadajnik.UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
       }
       break;
     }
-    case UC_WAKE_AND_CHECK:
+    case nadajnik.UC_WAKE_AND_CHECK:
     {
-        current_time = nadajnik.getCurrentTime();
+        nadajnik.getCurrentTime();
         nadajnik.pressureRead();
         nadajnik.managePressure();
         nadajnik.checkPressure();
 
-        #ifdef DEBUGSERIAL
-          //Serial.print("nrfgwi: "); Serial.println(nrfdata.sendgwizd);
-          Serial.print("AVG: "); Serial.println(bme_avg);
-        #endif
         nrfdata.raw = nadajnik.getBmeRawData();
         nrfdata.avg = nadajnik.getBmeAverage();
 
@@ -179,164 +148,14 @@ void loop() {
             nadajnik.setRepeatSending( nadajnik.getRepeatSending()+1 );
           }
         }
-        uc_state = UC_BTN_CHECK;
+        nadajnik.uc_state = nadajnik.UC_BTN_CHECK;
       break;
     }
-    case UC_WAITING_FOR_SENDBACK:
+    case nadajnik.UC_BTN_CHECK:
     {
-      break;
-    }
-    case UC_BTN_CHECK:
-    {
-      nadajnik.setGoToLongsleep(false);  // inaczej pojdzie spac long
-                                        // device_is_off pozostaje dla ustalenia czy 
-                                        // nadajnik był wybudzony czy pracowal normalnie
+      nadajnik.setGoToLongsleep(false);   // inaczej pojdzie spac long, device_is_off pozostaje dla ustalenia czy nadajnik był wybudzony czy pracowal normalnie
 
       nadajnik.manageButton();
-      
-      btn_last_state = btn_state;               // do rst
-      btn_state = digitalReadFast(BUTTON_PIN); // odczyt stanu guzika
-      
-      current_time = nadajnik.getCurrentTime();
-      
-      if(btn_state != btn_last_state) // jezeli stan przycisku sie zmienil
-      {
-        if(btn_state == HIGH)         // jezeli jest wysoki
-        {
-          btn_rst_counter++;          // licznik klikniec ++
-          last_rst_click = current_time;  // zeruj timeout
-          start_click_addr = current_time;  // ustaw start klikniecia do zmiany adresu
-        }
-        if(current_time - last_rst_click >= SW_RST_TIMEOUT)
-        {
-          btn_rst_counter = 0;
-          last_rst_click = current_time;
-        }
-        if(btn_rst_counter >= SW_RST_COUNT)
-        {
-          for(int i=0; i<12; i++)
-          {
-            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-            delay(100);
-          }
-          resetFunc(); //call reset
-        }
-      }
-
-
-      // CHECK IF BUTTON IS PRESSED FOR ADDRESS CHANGE (BETWEEN 850 & 2400 ms)
-      if(current_time - start_click_addr >= 850 && current_time - start_click_addr <= 2400)
-      {
-        if(btn_state == LOW)
-        {
-          // funkcja parowania z odbiornikiem!
-          if(nadajnik.getAddress() < 7) { nadajnik.setAddress( nadajnik.getAddress()+1 ); }
-          else { nadajnik.setAddress(0); }
-
-          radio.openWritingPipe(addressList[ nadajnik.getAddress() ]);
-          EEPROM.update(EEPROM_ADDRESS_PLACE, nadajnik.getAddress());
-
-          for (int i = 0; i < ((nadajnik.getAddress()+1)*2); i++)
-          {
-            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-            delay(200);
-          }
-          start_click_addr = current_time = nadajnik.getCurrentTime();
-        }
-      }
-
-      // jesli przycisk nie jest wcisniety lub zostal zwolniony
-      if(btn_state == LOW)
-      {
-        btn_pressed_time = current_time;  // ustaw obecny czas
-        start_click_addr = current_time;  // zeruj start timer dla zmiany adresu
-        // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
-      }
-
-      // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
-      if(btn_state == LOW && nadajnik.isLongsleep() == true)
-      {
-        nadajnik.setIsLongsleep(true);     // flaga off dla pewnosci
-        nadajnik.setGoToLongsleep(true);   // deleguj do glebokiego snu
-        uc_state = UC_GO_SLEEP;
-      }
-
-      // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
-      if(btn_state == HIGH && nadajnik.isLongsleep() == true) // jesli guzik + nadajnik off
-      {
-        if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
-        {
-          // pobudka
-          btn_pressed_time = current_time;
-
-          for(int i=0; i<192; i++)
-          {
-            analogWrite(LED_PIN, i);
-            delay(10);
-          }
-          for(int ip=0; ip<6; ip++)
-          {
-            for(int i=0; i<128; i++)
-            {
-              analogWrite(LED_PIN, i);
-              delayMicroseconds(500);
-            }
-            for(int i=128; i>0; i--)
-            {
-              analogWrite(LED_PIN, i);
-              delayMicroseconds(500);
-            }
-          }
-          digitalWriteFast(LED_PIN,LOW);
-          analogWrite(LED_PIN, 0);
-
-          nadajnik.setIsLongsleep(false);
-
-          // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
-          // dlatego gwizd_start_at = teraz
-          gwizd_start_at = current_time; 
-
-          detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
-          uc_state = UC_WAKE_AND_CHECK;
-        }
-        //uc_state = UC_GO_SLEEP;// nowe - przemyslec!
-      }
-
-      // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
-      else if(btn_state == true && nadajnik.isLongsleep() == false) // guzik + nadajnik ON
-      {
-        if(current_time - btn_pressed_time >= SWITCH_TIMEOUT)
-        {
-          // spij
-          nadajnik.setIsLongsleep(true);
-          nadajnik.setGoToLongsleep(true); 
-
-          for(int i=192; i>0; i--)
-          {
-            analogWrite(LED_PIN, i);
-            delay(10);
-          }
-          digitalWriteFast(LED_PIN,LOW);
-          analogWrite(LED_PIN, 0);
-
-          uc_state = UC_GO_SLEEP;
-        }       
-      }
-      else
-      {
-        // yyyyy...
-      }
-
-      
-
-      // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
-      if(btn_state == LOW && nadajnik.getGoToLongsleep() == false)
-      {
-        btn_pressed_time = current_time; // to wlasciwie mozna usunac na rzecz tego na gorze?
-        // i od razu w krotka kime
-        uc_state = UC_GO_SLEEP;
-        break;
-      }
 
       break;
     }
