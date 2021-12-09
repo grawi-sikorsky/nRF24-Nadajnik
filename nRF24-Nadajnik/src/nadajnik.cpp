@@ -198,7 +198,7 @@ void Nadajnik::checkPressure()
     sendSignal = true;                                  // ustaw gwizdek aktywny
     no_gwizd = false;
     nrfdata.sendgwizd = 1;                            // dane do wysylki
-    gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
+    gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
   }
   else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
   {
@@ -236,7 +236,7 @@ void check_pressure()
     sendSignal = true;                                  // ustaw gwizdek aktywny
     no_gwizd = false;                                 // ustaw brak transmisji jako nieprawda
     nrfdata.sendgwizd = 1;                            // dane do wysylki
-    gwizd_start_at = millis();                        // ustaw czas ostatniego gwizdniecia
+    gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
   }
   else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
   {
@@ -257,7 +257,7 @@ void check_pressure()
 void Nadajnik::manageTimeout()
 {
   currentTime = millis();
-  giwzd_timeout = currentTime - gwizd_start_at;
+  giwzd_timeout = currentTime - gwizdStartTime;
 
   if(giwzd_timeout < TIMEOUT_1) // pierwszy prog
   {
@@ -272,7 +272,7 @@ void Nadajnik::manageTimeout()
   { 
     goToLongsleep = true;
     isInLongsleep = true;
-  }  
+  }
 }
 
 /*********************************************************************
@@ -390,8 +390,8 @@ void Nadajnik::manageButton(){
           isInLongsleep = false;
 
           // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
-          // dlatego gwizd_start_at = teraz
-          gwizd_start_at = currentTime; 
+          // dlatego gwizdStartTime = teraz
+          gwizdStartTime = currentTime; 
 
           detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
           uc_state = UC_WAKE_AND_CHECK;
