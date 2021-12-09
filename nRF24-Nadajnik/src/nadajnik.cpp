@@ -257,18 +257,18 @@ void check_pressure()
 void Nadajnik::manageTimeout()
 {
   currentTime = millis();
-  giwzd_timeout = currentTime - gwizdStartTime;
+  time_t inactiveTime = currentTime - gwizdStartTime;
 
-  if(giwzd_timeout < TIMEOUT_1) // pierwszy prog
+  if(inactiveTime < TIMEOUT_1) // pierwszy prog
   {
     sleeptime = SLEEP_120MS;
   }
-  else if(giwzd_timeout > TIMEOUT_1 && giwzd_timeout < TIMEOUT_2) // drugi prog
+  else if(inactiveTime > TIMEOUT_1 && inactiveTime < TIMEOUT_2) // drugi prog
   {
     // zmniejsz probkowanie 2x/s
     sleeptime = SLEEP_250MS; // 1S
-  } 
-  else if(giwzd_timeout > TIMEOUT_2 )
+  }
+  else if(inactiveTime > TIMEOUT_2 )
   { 
     goToLongsleep = true;
     isInLongsleep = true;

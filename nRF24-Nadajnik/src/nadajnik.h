@@ -26,7 +26,7 @@ class Nadajnik{
         bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
         int   repeatSending   = 0;    // ilosc powtorzen transmisji do odbiornika
         int   repeatSendingOffMsg = 0;      // ilosc powtorzen wysylki 0 (off) do odbiornika
-        time_t gwizdStartTime, giwzd_timeout;        // timeout gwizd
+        time_t gwizdStartTime;        // timeout gwizd
 
         int pickedAddress = 0;              // wybor adresu z tablicy powyzej
         bool  whistle_connected = false;
