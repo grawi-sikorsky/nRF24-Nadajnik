@@ -176,7 +176,7 @@ void Nadajnik::managePressure()
 #ifdef GWIZD_2S
 void Nadajnik::checkPressure()
 {
-  if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
+  if(pauseAfterGwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
   {
     // if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
     // {
@@ -186,7 +186,7 @@ void Nadajnik::checkPressure()
     // else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
     // {
     //   nrfdata.sendgwizd = 2;
-    //   no_gwizd = false;
+    //   pauseAfterGwizd = false;
     // }
   }
   if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
@@ -196,7 +196,7 @@ void Nadajnik::checkPressure()
     #endif
 
     sendSignal = true;                                  // ustaw gwizdek aktywny
-    no_gwizd = false;
+    pauseAfterGwizd = false;
     nrfdata.sendgwizd = 1;                            // dane do wysylki
     gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
   }
@@ -207,14 +207,14 @@ void Nadajnik::checkPressure()
     #endif
     //nrfdata.sendgwizd = 2;
     sendSignal = false;                                 // flaga gwizdka rowniez OFF
-    no_gwizd = true;
+    pauseAfterGwizd = true;
     repeatSendingOffMsg = 0;
   }
 }
 #else
 void check_pressure()
 {
-  if(no_gwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
+  if(pauseAfterGwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
   {
     if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
     {
@@ -224,7 +224,7 @@ void check_pressure()
     else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
     {
       nrfdata.sendgwizd = 2;
-      no_gwizd = false;
+      pauseAfterGwizd = false;
     }
   }
   if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
@@ -234,7 +234,7 @@ void check_pressure()
     #endif
 
     sendSignal = true;                                  // ustaw gwizdek aktywny
-    no_gwizd = false;                                 // ustaw brak transmisji jako nieprawda
+    pauseAfterGwizd = false;                                 // ustaw brak transmisji jako nieprawda
     nrfdata.sendgwizd = 1;                            // dane do wysylki
     gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
   }
@@ -246,7 +246,7 @@ void check_pressure()
     nrfdata.sendgwizd = 0;
     sendSignal = false;                                 // flaga gwizdka rowniez OFF
     repeatSendingOffMsg = 0;                                // zeruj licznik powtorzen wysylki 0
-    no_gwizd = true;
+    pauseAfterGwizd = true;
   }
 }
 #endif
@@ -459,6 +459,9 @@ bool Nadajnik::getSendSignalState(){ return sendSignal; }
 
 void Nadajnik::setRepeatSending(int iterations) { repeatSending = iterations; }
 int Nadajnik::getRepeatSending() { return repeatSending; }
+
+void Nadajnik::setPauseAfterGwizd(bool val){ pauseAfterGwizd = val; }
+bool Nadajnik::getPauseAfterGwizd(){ return pauseAfterGwizd; }
 
 float Nadajnik::getBmeRawData(){ return bmeRaw; }
 

@@ -135,10 +135,11 @@ void loop() {
         nrfdata.raw = nadajnik.getBmeRawData();
         nrfdata.avg = nadajnik.getBmeAverage();
 
-        if(nadajnik.getSendSignalState())
+        if(nadajnik.getSendSignalState() && !nadajnik.getPauseAfterGwizd())
         {
           nadajnik.SendRFData();
           nadajnik.setRepeatSending(0);
+          nadajnik.setPauseAfterGwizd(true);
         }
         else
         {
@@ -146,6 +147,9 @@ void loop() {
           {
             nadajnik.SendRFData();
             nadajnik.setRepeatSending( nadajnik.getRepeatSending()+1 );
+          }
+          else{
+            nadajnik.setSendSignal(false);
           }
         }
         nadajnik.uc_state = nadajnik.UC_BTN_CHECK;

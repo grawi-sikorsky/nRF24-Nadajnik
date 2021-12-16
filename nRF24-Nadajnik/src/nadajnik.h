@@ -23,7 +23,7 @@ class Nadajnik{
         int   bmeAverageIterator = 0;       // licznik AVG
 
         bool  sendSignal  = false;    // info o aktywnym gwizdku
-        bool  no_gwizd    = false;    // przestawia transmisje na 'nieaktywna' = 2 w kolejnej petli
+        bool  pauseAfterGwizd    = false;    // jesli gwizdniecie wykryty - robi pauze na 1s
         int   repeatSending   = 0;    // ilosc powtorzen transmisji do odbiornika
         int   repeatSendingOffMsg = 0;      // ilosc powtorzen wysylki 0 (off) do odbiornika
         time_t gwizdStartTime;        // timeout gwizd
@@ -153,6 +153,9 @@ class Nadajnik{
 
         void setRepeatSending(int iterations);
         int getRepeatSending();
+
+        void setPauseAfterGwizd(bool val);
+        bool getPauseAfterGwizd();
         
         float getBmeRawData();
         float getBmeAverage();
