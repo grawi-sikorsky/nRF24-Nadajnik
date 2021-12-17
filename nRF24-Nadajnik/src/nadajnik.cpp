@@ -176,39 +176,33 @@ void Nadajnik::managePressure()
 #ifdef GWIZD_2S
 void Nadajnik::checkPressure()
 {
-  if(pauseAfterGwizd == true)                    //  jesli cisnienie wrocilo do normy-> najpierw kilka razy powtorz 0 a nastepnie 2 jako brak transmisji
+  if( millis() - gwizdStartTime > PAUSE_AFTER_GWIZD )
   {
-    // if(repeatSendingOffMsg < RF_OFF_REPEAT)     //  jesli 
-    // {
-    //   nrfdata.sendgwizd = 1;              // najpierw 0 jako informacja o wylaczeniu
-    //   repeatSendingOffMsg++;
-    // }
-    // else                                  // jak juz wystarczajaco duzo 0 poleci - ustaw transmisje na nieaktywna
-    // {
-    //   nrfdata.sendgwizd = 2;
-    //   pauseAfterGwizd = false;
-    // }
-  }
-  if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
-  {
-    #ifdef DEBUGSERIAL
-      Serial.println("GWIZD ON");
-    #endif
-
-    sendSignal = true;                                  // ustaw gwizdek aktywny
     pauseAfterGwizd = false;
-    nrfdata.sendgwizd = 1;                            // dane do wysylki
-    gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
   }
-  else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
-  {
-    #ifdef DEBUGSERIAL
-      Serial.println("Gwizd OFF");
-    #endif
-    //nrfdata.sendgwizd = 2;
-    sendSignal = false;                                 // flaga gwizdka rowniez OFF
-    pauseAfterGwizd = true;
-    repeatSendingOffMsg = 0;
+
+  if(!pauseAfterGwizd){
+    if(bmeRaw > (bmeAverage + BME_AVG_SENS))             // JESLI NOWA PROBKA JEST WIEKSZA OD SREDNIEJ [AVG + AVG_DIFF]
+    {
+      #ifdef DEBUGSERIAL
+        Serial.println("GWIZD ON");
+      #endif
+
+      sendSignal = true;                                // ustaw gwizdek aktywny
+      //pauseAfterGwizd = true;                           // jest sygnal - ustaw pause
+      nrfdata.sendgwizd = 1;                            // dane do wysylki
+      gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
+    }
+    // else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
+    // {
+    //   #ifdef DEBUGSERIAL
+    //     Serial.println("Gwizd OFF");
+    //   #endif
+    //   //nrfdata.sendgwizd = 2;
+    //   sendSignal = false;                                 // flaga gwizdka rowniez OFF
+    //   //pauseAfterGwizd = true;
+    //   repeatSendingOffMsg = 0;
+    // }
   }
 }
 #else
