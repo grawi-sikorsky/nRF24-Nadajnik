@@ -16,7 +16,7 @@
 #define TIMEOUT_1       72000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
 #define TIMEOUT_2       144000//144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
 
-#define RF_REPEAT       3          // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
+#define RF_REPEAT       2          // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
 #define RF_OFF_REPEAT   2           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
 
 #define GWIZD_2S                    // jesli zdefiniowany to nadajnik wysyla tylko 1 i ew 2 do odbiornika, ledy wylaczaja sie w odbiorniku po uplynieciu 2s
