@@ -27,4 +27,4 @@
 // Ustawienia czujnika BME
 #define BME_AVG_COUNT 20      // wiecej -> dluzszy powrot avg do normy
 #define BME_AVG_DIFF  800     // Im mniej tym dluzej wylacza sie po dmuchaniu. Zbyt malo powoduje ze mimo wylaczenia sie gwizdka, wlacza sie ponownie gdy wartosci wracaja do normy i avg.
-#define BME_AVG_SENS  220      // Czulosc dmuchniecia
+#define BME_AVG_SENS  250      // Czulosc dmuchniecia

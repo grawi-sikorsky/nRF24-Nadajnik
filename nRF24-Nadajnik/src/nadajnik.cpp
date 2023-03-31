@@ -37,7 +37,7 @@ void Nadajnik::init(){
     pressureInitialize();   // inicjalizacja tablicy AVG
 
     bme.setMode(00);
-    bme.end();
+    //bme.end();
 }
 
 void Nadajnik::ButtonPressed(){
@@ -80,7 +80,7 @@ void Nadajnik::prepareToSleep()
   radio.stopListening();
   radio.powerDown();    // delay(5);
   bme.setMode(00);
-  bme.end();
+  //bme.end();
   power_spi_disable();  // SPI
 }
 
