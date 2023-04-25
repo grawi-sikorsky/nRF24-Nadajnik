@@ -86,7 +86,8 @@ void setup()
   digitalWriteFast(MISO,HIGH);
   digitalWriteFast(SCK,HIGH);
 
-  nadajnik.setAddress( EEPROM.read(EEPROM_ADDRESS_PLACE) ); // odczytaj z eeprom wartosc przed inicjalizacja nrfki
+  nadajnik.setAddress( 0 ); //domyslny 0 - bo wylaczony guzik zmieniajacy adres
+  // nadajnik.setAddress( EEPROM.read(EEPROM_ADDRESS_PLACE) ); // odczytaj z eeprom wartosc przed inicjalizacja nrfki
 
   nadajnik.init();
 

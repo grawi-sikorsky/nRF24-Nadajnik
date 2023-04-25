@@ -316,25 +316,25 @@ void Nadajnik::manageButton(){
 
 
       // CHECK IF BUTTON IS PRESSED FOR ADDRESS CHANGE (BETWEEN 850 & 2400 ms)
-      if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
-      {
-        if(buttonState == LOW)
-        {
-          // funkcja parowania z odbiornikiem!
-          if(pickedAddress < 7) { pickedAddress++; }
-          else { pickedAddress = 0; }
+      // if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
+      // {
+      //   if(buttonState == LOW)
+      //   {
+      //     // funkcja parowania z odbiornikiem!
+      //     if(pickedAddress < 7) { pickedAddress++; }
+      //     else { pickedAddress = 0; }
 
-          radio.openWritingPipe(addressList[ pickedAddress ]);
-          EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
+      //     radio.openWritingPipe(addressList[ pickedAddress ]);
+      //     EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
 
-          for (int i = 0; i < ((pickedAddress+1)*2); i++)
-          {
-            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-            delay(200);
-          }
-          start_click_addr = currentTime = millis();
-        }
-      }
+      //     for (int i = 0; i < ((pickedAddress+1)*2); i++)
+      //     {
+      //       digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+      //       delay(200);
+      //     }
+      //     start_click_addr = currentTime = millis();
+      //   }
+      // }
 
       // jesli przycisk nie jest wcisniety lub zostal zwolniony
       if(buttonState == LOW)
