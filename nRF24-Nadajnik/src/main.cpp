@@ -18,14 +18,6 @@
 Nadajnik nadajnik;
 RF24 radio(8, 9); // CE, CSN
 
-struct outdata
-{
-  int     sendgwizd = 2;
-  float   raw;
-  float   avg;
-};
-outdata nrfdata;
-
 //#define DEBUGSERIAL
 //#define DEBUG
 //#define UNO
@@ -132,9 +124,6 @@ void loop() {
         nadajnik.pressureRead();
         nadajnik.managePressure();
         nadajnik.checkPressure();
-
-        nrfdata.raw = nadajnik.getBmeRawData();
-        nrfdata.avg = nadajnik.getBmeAverage();
 
         if(nadajnik.getSendSignalState() && !nadajnik.getPauseAfterGwizd())
         {

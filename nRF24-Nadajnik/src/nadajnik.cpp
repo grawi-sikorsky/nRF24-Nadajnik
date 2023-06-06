@@ -190,7 +190,8 @@ void Nadajnik::checkPressure()
 
       sendSignal = true;                                // ustaw gwizdek aktywny
       //pauseAfterGwizd = true;                           // jest sygnal - ustaw pause
-      nrfdata.sendgwizd = 1;                            // dane do wysylki
+      whistleData.device = 0;
+      whistleData.command = 1;                            // dane do wysylki
       gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
     }
     // else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
@@ -275,7 +276,7 @@ void Nadajnik::manageTimeout()
 bool Nadajnik::SendRFData()
 {
   bool result;
-  result = radio.write(&nrfdata, sizeof(nrfdata));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
+  result = radio.write(&whistleData, sizeof(whistleData));   // PIERWSZA TRANSMISJA DO ODBIORNIKA!
 
   return result;
 }
@@ -411,7 +412,11 @@ void Nadajnik::manageButton(){
           analogWrite(LED_PIN, 0);
 
           uc_state = UC_GO_SLEEP;
-        }       
+        }
+        else{
+          whistleData.command = ETimerStop;
+          SendRFData();
+        }
       }
       else
       {

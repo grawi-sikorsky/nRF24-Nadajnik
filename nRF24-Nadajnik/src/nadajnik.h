@@ -42,13 +42,23 @@ class Nadajnik{
         bool isInLongsleep = false;         // device is in longsleep flag
         bool goToLongsleep = false;         // sets device to go to longsleep in nex loop
 
-        struct outdata
-        {
-        int     sendgwizd = 2;
-        float   raw;
-        float   avg;
+        enum EWhistleCommands{
+            ELightsOn,
+            ETimerStop,
+            EDefaultState
         };
-        outdata nrfdata;
+
+        enum EDevices{
+            EWhistle,
+            EController
+        };
+
+        struct WhistleData
+        {
+            int     device = EWhistle;
+            int     command = EDefaultState;
+        };
+        WhistleData whistleData;
 
         bool ackOK;
 
