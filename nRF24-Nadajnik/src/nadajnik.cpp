@@ -188,11 +188,11 @@ void Nadajnik::checkPressure()
         Serial.println("GWIZD ON");
       #endif
 
-      sendSignal = true;                                // ustaw gwizdek aktywny
+      sendSignal = true;                                  // ustaw gwizdek aktywny
       //pauseAfterGwizd = true;                           // jest sygnal - ustaw pause
       whistleData.device = 0;
-      whistleData.command = 1;                            // dane do wysylki
-      gwizdStartTime = millis();                        // ustaw czas ostatniego gwizdniecia
+      whistleData.command = EWhistleCommands::ELightsOn;  // dane do wysylki
+      gwizdStartTime = millis();                          // ustaw czas ostatniego gwizdniecia
     }
     // else if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)) && sendSignal == true)   // JESLI CISNIENIE WRACA DO WIDELEK [AVG +- AVG_DIFF] a gwizdek jest aktywny
     // {

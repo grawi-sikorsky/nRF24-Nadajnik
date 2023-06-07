@@ -8,9 +8,7 @@
 #include <avr/power.h>
 #include <avr/sleep.h>
 
-byte const addressList[][5] = {"Odb0","Odb1","Odb2","Odb3","Odb4","Odb5","Odb6","Odb7"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
-
-
+byte const addressList[][6] = { "1Node", "2Node", "3Node", "4Node", "5Node", "6Node" };
 
 class Nadajnik{
 
