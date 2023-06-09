@@ -43,6 +43,7 @@ void setup()
   WDTCSR = 0;
 
   ADCSRA &= ~(1 << 7); // TURN OFF ADC CONVERTER
+  
   //power_timer0_disable();// TIMER 0 SLEEP WDT ...
   power_timer1_disable();// Timer 1
   power_timer2_disable();// Timer 2

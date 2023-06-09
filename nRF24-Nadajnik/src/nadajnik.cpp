@@ -79,10 +79,8 @@ void Nadajnik::prepareToSleep()
 
   radio.stopListening();
   radio.powerDown();    
-  delayMicroseconds(5); // delay(5);
   bme.setMode(00);
   bme.end();
-  delayMicroseconds(5);
   power_spi_disable();  // SPI
 }
 
