@@ -37,9 +37,8 @@ void isr_button() {
 void setup() 
 {
   nadajnik.uc_state = nadajnik.UC_GO_SLEEP; // default uC state
-
   // wylacz WDT
-  MCUSR= 0 ;
+  MCUSR = 0;
   WDTCSR |= _BV(WDCE) | _BV(WDE);
   WDTCSR = 0;
 
@@ -66,8 +65,11 @@ void setup()
   }
 
   pinModeFast(LED_PIN,OUTPUT);
+  pinModeFast(LED2_PIN,OUTPUT);
   pinModeFast(BUTTON_PIN,INPUT);
   digitalWriteFast(LED_PIN, LOW);  // LED OFF
+  digitalWriteFast(LED2_PIN, LOW);  // LED OFF
+
 
   pinModeFast(SS,OUTPUT);
   pinModeFast(MOSI,OUTPUT);
@@ -89,6 +91,8 @@ void setup()
     digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
     delay(40);
   }
+  digitalWriteFast(LED_PIN, LOW);  // LED OFF
+  digitalWriteFast(LED2_PIN, LOW);  // LED OFF
 }
 
 /*****************************************************

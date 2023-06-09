@@ -72,8 +72,6 @@ class Nadajnik{
         // wiadomo..
         void init();
 
-        void reset();
-
         /*****************************************************
          * Obsluga przerwania przycisku
          * ***************************************************/

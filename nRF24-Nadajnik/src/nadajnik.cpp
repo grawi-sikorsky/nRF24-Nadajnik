@@ -78,9 +78,11 @@ void Nadajnik::prepareToSleep()
   #endif
 
   radio.stopListening();
-  radio.powerDown();    // delay(5);
+  radio.powerDown();    
+  delayMicroseconds(5); // delay(5);
   bme.setMode(00);
   bme.end();
+  delayMicroseconds(5);
   power_spi_disable();  // SPI
 }
 
@@ -89,7 +91,7 @@ void Nadajnik::prepareToSleep()
  * ***************************************************/
 void Nadajnik::pressureRead()
 {
-  if(bmeTableNeedsInit == true) delay(5);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
+  if(bmeTableNeedsInit == true) delay(2);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
 
   bmeRaw = bme.readFixedPressure();         // Odczyt z czujnika bme
 }
