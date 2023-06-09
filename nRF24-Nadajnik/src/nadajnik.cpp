@@ -410,7 +410,6 @@ void Nadajnik::manageButton(){
           }
           digitalWriteFast(LED_PIN,LOW);
           analogWrite(LED_PIN, 0);
-
           uc_state = UC_GO_SLEEP;
         }
         else{
