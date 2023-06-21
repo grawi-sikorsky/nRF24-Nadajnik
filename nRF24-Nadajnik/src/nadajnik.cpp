@@ -415,7 +415,7 @@ void Nadajnik::manageButton(){
         else{
           whistleData.command = ETimerStop;
           SendRFData();
-          uc_state = UC_GO_SLEEP;
+          // uc_state = UC_GO_SLEEP;
         }
       }
       else
