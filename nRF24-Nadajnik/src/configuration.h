@@ -9,7 +9,7 @@
 
 // ustawienia
 #define SWITCH_TIMEOUT  3000          // czas przycisku nacisniecia
-#define SW_RST_TIMEOUT  250          // czas w ktorym należy wykonac klikniecia dla RST
+#define SW_RST_TIMEOUT  250          // maksymalny interwał w ktorym należy wykonac klikniecia dla RST
 #define SW_RST_COUNT    5             // ilosc nacisniec do wykonania resetu
 #define TIME_TO_WAIT_MS 5            // czas do nastepnego wyzwolenia????
 #define TIMEOUT_1       72000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000

@@ -12,9 +12,6 @@
 #include "configuration.h"
 #include "nadajnik.h"
 
-//**************************
-//  NADAJNIK GWIZDEK
-//**************************
 Nadajnik nadajnik;
 RF24 radio(8, 9); // CE, CSN
 
@@ -22,14 +19,10 @@ RF24 radio(8, 9); // CE, CSN
 //#define DEBUG
 //#define UNO
 
-/*****************************************************
- * Przerwanie dla przycisku
- * ***************************************************/
+//Przerwanie dla przycisku
 void isr_button() {
   nadajnik.ButtonPressed();
 }
-
-
 
 /*****************************************************
  * ARDUINO SETUP
@@ -96,6 +89,7 @@ void setup()
   digitalWriteFast(LED2_PIN, LOW);  // LED OFF
 }
 
+
 /*****************************************************
  * LOOP
  * ***************************************************/
@@ -153,9 +147,7 @@ void loop() {
     case nadajnik.UC_BTN_CHECK:
     {
       nadajnik.setGoToLongsleep(false);   // inaczej pojdzie spac long, device_is_off pozostaje dla ustalenia czy nadajnik był wybudzony czy pracowal normalnie
-
       nadajnik.manageButton();
-
       break;
     }
   }

@@ -89,7 +89,7 @@ void Nadajnik::prepareToSleep()
  * ***************************************************/
 void Nadajnik::pressureRead()
 {
-  if(bmeTableNeedsInit == true) delay(2);           // delay bo???? bo byc moze po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
+  if(bmeTableNeedsInit == true) delay(2);   // po deepsleep po resecie bme280 pierwsza wartosc odczytu moze byc nieprawdziwa
 
   bmeRaw = bme.readFixedPressure();         // Odczyt z czujnika bme
 }
@@ -144,7 +144,6 @@ void Nadajnik::managePressure()
 
   // START USREDNIANIA DANYCH
   // dopoki bmeAverageIterator jest mniejsze od ilosci probek BME_AVG_COUNT
-  // czy tu czasem nie jest o jedna wartosc mniej poprzez  < zamiast <= ?
   if(bmeAverageIterator < BME_AVG_COUNT)
   {
     if((bmeRaw < (bmeAverage + BME_AVG_DIFF)) && (bmeRaw > (bmeAverage - BME_AVG_DIFF)))  // jesli obecna probka miesci sie w widelkach +-[BME_AVG_DIFF] 
@@ -293,16 +292,16 @@ void Nadajnik::manageButton(){
       
       if(buttonState != buttonLastState) // jezeli stan przycisku sie zmienil
       {
+        if(currentTime - last_rst_click >= SW_RST_TIMEOUT)
+        {
+          buttonClickCount = 0;
+          last_rst_click = currentTime;
+        }
         if(buttonState == HIGH)         // jezeli jest wysoki
         {
           buttonClickCount++;          // licznik klikniec ++
           last_rst_click = currentTime;  // zeruj timeout
           start_click_addr = currentTime;  // ustaw start klikniecia do zmiany adresu
-        }
-        if(currentTime - last_rst_click >= SW_RST_TIMEOUT)
-        {
-          buttonClickCount = 0;
-          last_rst_click = currentTime;
         }
         if(buttonClickCount >= SW_RST_COUNT)
         {
@@ -314,28 +313,6 @@ void Nadajnik::manageButton(){
           resetFunc(); //call reset
         }
       }
-
-
-      // CHECK IF BUTTON IS PRESSED FOR ADDRESS CHANGE (BETWEEN 850 & 2400 ms)
-      // if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
-      // {
-      //   if(buttonState == LOW)
-      //   {
-      //     // funkcja parowania z odbiornikiem!
-      //     if(pickedAddress < 7) { pickedAddress++; }
-      //     else { pickedAddress = 0; }
-
-      //     radio.openWritingPipe(addressList[ pickedAddress ]);
-      //     EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
-
-      //     for (int i = 0; i < ((pickedAddress+1)*2); i++)
-      //     {
-      //       digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-      //       delay(200);
-      //     }
-      //     start_click_addr = currentTime = millis();
-      //   }
-      // }
 
       // jesli przycisk nie jest wcisniety lub zostal zwolniony
       if(buttonState == LOW)
@@ -359,34 +336,11 @@ void Nadajnik::manageButton(){
         if(currentTime - btn_pressed_time >= SWITCH_TIMEOUT)
         {
           // pobudka
-          btn_pressed_time = currentTime;
-
-          for(int i=0; i<192; i++)
-          {
-            analogWrite(LED_PIN, i);
-            delay(10);
-          }
-          for(int ip=0; ip<6; ip++)
-          {
-            for(int i=0; i<128; i++)
-            {
-              analogWrite(LED_PIN, i);
-              delayMicroseconds(500);
-            }
-            for(int i=128; i>0; i--)
-            {
-              analogWrite(LED_PIN, i);
-              delayMicroseconds(500);
-            }
-          }
-          digitalWriteFast(LED_PIN,LOW);
-          analogWrite(LED_PIN, 0);
-
+          // po dlugim snie moze przy checktimeout wpasc znow w deepsleep dlatego gwizdStartTime = teraz
+          gwizdStartTime = millis(); 
+          btn_pressed_time = millis();
+          this->powerOnBlink();
           isInLongsleep = false;
-
-          // po dlugim snie moze przy checktimeout wpasc znow w deepsleep
-          // dlatego gwizdStartTime = teraz
-          gwizdStartTime = currentTime; 
 
           detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
           uc_state = UC_WAKE_AND_CHECK;
@@ -432,6 +386,29 @@ void Nadajnik::manageButton(){
       }
 }
 
+void Nadajnik::powerOnBlink()
+{
+  for (int i = 0; i < 192; i++)
+  {
+    analogWrite(LED_PIN, i);
+    delay(10);
+  }
+  for (int ip = 0; ip < 6; ip++)
+  {
+    for (int i = 0; i < 128; i++)
+    {
+      analogWrite(LED_PIN, i);
+      delayMicroseconds(500);
+    }
+    for (int i = 128; i > 0; i--)
+    {
+      analogWrite(LED_PIN, i);
+      delayMicroseconds(500);
+    }
+  }
+  digitalWriteFast(LED_PIN, LOW);
+  analogWrite(LED_PIN, 0);
+}
 
 int Nadajnik::getAddress(){
   return pickedAddress;

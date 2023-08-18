@@ -139,6 +139,7 @@ class Nadajnik{
          * *******************************************************************/
         void manageButton();
 
+        void powerOnBlink();
 
         void setAddress(int address);
         int getAddress();
