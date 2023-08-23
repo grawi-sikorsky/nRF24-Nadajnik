@@ -37,7 +37,7 @@ bool lightsup;
 int lightsup_iter;                    // ilosc powrotrzen sygnalu gdy wejscie jest wlaczone
 bool RightSide;                       // zworka na pcb do wyboru strony boiska na ktorym pracuje ten nadajnik. TRUE/LOW = prawa strona, FALSE/HIGH = lewa strona.
 
-byte address[][5] = {"Odb0","Odb1","Odb2","Odb3","Odb4","Odb5","Odb6","Odb7"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
+byte address[][6] = { "1Node", "2Node", "3Node", "4Node", "5Node", "6Node"};  // dostepne adresy odbiornikow zgodnie ze zworkami 1-3
 int address_nr = 0; // wybor adresu z tablicy powyzej
 RF24 radio(9, 10); // CE, CSN
 
@@ -55,6 +55,26 @@ struct outdata
   float   avg = 0;
 };
 outdata nrfdata;
+
+enum EWhistleCommands
+{
+	ELightsOn,
+	ETimerStop,
+	EDefaultState
+};
+
+enum EDevices
+{
+	EWhistle,
+	EController,
+};
+
+struct WhistleData
+{
+	uint8_t device = EWhistle;
+	uint8_t command = EDefaultState;
+};
+WhistleData whistleData;
 
 enum uc_State {
   UC_GO_SLEEP = 0,
@@ -149,7 +169,7 @@ void manageTimeout()
 bool SendRFData()
 {
   bool result;
-  result = radio.write(&nrfdata, sizeof(nrfdata));   // TRANSMISJA
+  result = radio.write(&whistleData, sizeof(whistleData));   // TRANSMISJA
 
   #ifdef ACK_ON
     if(result)
@@ -393,15 +413,15 @@ void loop()
           #endif
           if(input_1 == true)
           {
-            nrfdata.sendgwizd = INPUT1_RF_VAL;
+            whistleData.command = INPUT1_RF_VAL;
           }
           if(input_2 == true)
           {
-            nrfdata.sendgwizd = INPUT2_RF_VAL;
+            whistleData.command = INPUT2_RF_VAL;
           }
           if(input_1 == true && input_2 == true)
           {
-            nrfdata.sendgwizd = BOTH_RF_VAL;
+            whistleData.command = BOTH_RF_VAL;
           }
           SendRFData();                             // wyslij rf
           delay(2);                                 // delay zeby serial sie odswiezyl
