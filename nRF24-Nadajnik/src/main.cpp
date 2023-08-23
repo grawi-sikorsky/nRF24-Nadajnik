@@ -27,7 +27,7 @@ void isr_button() {
 /*****************************************************
  * ARDUINO SETUP
  * ***************************************************/
-void setup() 
+void setup()
 {
   nadajnik.uc_state = nadajnik.UC_GO_SLEEP; // default uC state
   // wylacz WDT

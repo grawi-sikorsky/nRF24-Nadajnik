@@ -17,8 +17,8 @@
 // #define TIMEOUT_1       2400// 72000       // up debug approx 1 min
 // #define TIMEOUT_2       4800//144000       // up debug apprix 2 min
 
-#define RF_REPEAT       2          // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
-#define RF_OFF_REPEAT   2           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
+#define RF_REPEAT       1          // ilosc powtorzen transmisji [w tym zawieraja sie tez ponizsze], [domyslne 0, dodatkowe 0, 2, 2]
+#define RF_OFF_REPEAT   1           // ilosc powtorzen OFF  [jako dodatkowa poza domyslna jedna]
 
 #define GWIZD_2S                    // jesli zdefiniowany to nadajnik wysyla tylko 1 i ew 2 do odbiornika, ledy wylaczaja sie w odbiorniku po uplynieciu 2s
                                     // jesli nie jest zdefiniowany, to nadajnik wysyla 1 gdy gwizd, nastepnie 0 aby wylaczyc ledy i 2 jako brak transmisji.
