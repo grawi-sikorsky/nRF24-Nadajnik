@@ -366,10 +366,11 @@ void Nadajnik::manageButton(){
           analogWrite(LED_PIN, 0);
           uc_state = UC_GO_SLEEP;
         }
-        else{
+        else if(buttonLastState != buttonState){
+          detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
           whistleData.command = ETimerStop;
           SendRFData();
-          // uc_state = UC_GO_SLEEP;
+          // uc_state = UC_WAKE_AND_CHECK;
         }
       }
       else
