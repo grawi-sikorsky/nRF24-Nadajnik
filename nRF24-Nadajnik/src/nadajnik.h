@@ -31,7 +31,7 @@ class Nadajnik{
 
         period_t sleeptime = SLEEP_120MS;
         time_t currentTime;
-        time_t btn_current, btn_pressed_time, btn_timeout, last_rst_click;
+        time_t btn_current, btn_isr_pressed_time, btn_timeout, last_rst_click;
         time_t start_click_addr;
         bool buttonState = LOW;
         bool buttonLastState = LOW;
@@ -71,16 +71,6 @@ class Nadajnik{
 
         // wiadomo..
         void init();
-
-        /*****************************************************
-         * Obsluga przerwania przycisku
-         * ***************************************************/
-        void ButtonPressed();
-
-        /*****************************************************
-         * Przerwanie dla przycisku
-         * ***************************************************/
-        void ISR_INT0_vect();
 
         /*****************************************************
          * Uruchamia niezbedne peryferia po spaniu
@@ -138,6 +128,25 @@ class Nadajnik{
          * Obsluga przycisku i jego akcji
          * *******************************************************************/
         void manageButton();
+        void updateButtonState();
+        bool buttonStateChanged();
+        void performReset();
+        void handleButtonReleased();
+        void handleButtonPressed();
+        void handleButtonPressedWhileActive();
+        void handleButtonPressedWhileInactive();
+        void handleButtonIdle();
+        void handleButtonClicks();
+
+        /*****************************************************
+         * Obsluga przerwania przycisku
+         * ***************************************************/
+        void ButtonPressed();
+
+        /*****************************************************
+         * Przerwanie dla przycisku
+         * ***************************************************/
+        void ISR_INT0_vect();
 
         void powerOnBlink();
 

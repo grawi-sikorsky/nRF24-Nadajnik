@@ -43,7 +43,7 @@ void Nadajnik::init(){
 void Nadajnik::ButtonPressed(){
   if(isInLongsleep == true)  // jesli urzadzenie jest wylaczone
   {
-    btn_pressed_time = millis();
+    btn_isr_pressed_time = millis();
     uc_state = UC_BTN_CHECK;  // wlacz i przejdz do sprawdzenia stanu przycisku
   }
 }
@@ -280,111 +280,180 @@ bool Nadajnik::SendRFData()
   return result;
 }
 
+void Nadajnik::updateButtonState(){
+    buttonLastState = buttonState;
+    buttonState = digitalReadFast(BUTTON_PIN);
+}
+
+bool Nadajnik:: buttonStateChanged() {
+    return buttonState != buttonLastState;
+}
+
+void Nadajnik::performReset() {
+    for (int i = 0; i < 12; i++) {
+        digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+        delay(100);
+    }
+    resetFunc(); // Call reset
+}
+
+void Nadajnik::handleButtonPressed(){
+  if(buttonState == HIGH && isInLongsleep == true)    // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
+  {
+    handleButtonPressedWhileInactive();
+  }
+  else if(buttonState == true && isInLongsleep == false)  // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
+  {
+    handleButtonPressedWhileActive();
+  }
+}
+
+void Nadajnik::handleButtonPressedWhileInactive(){
+  if(currentTime - btn_isr_pressed_time >= SWITCH_TIMEOUT)
+  {
+    // pobudka
+    // po dlugim snie moze przy checktimeout wpasc znow w deepsleep dlatego gwizdStartTime = teraz
+    gwizdStartTime = millis(); 
+    btn_isr_pressed_time = millis();
+    this->powerOnBlink();
+    isInLongsleep = false;
+
+    detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
+    uc_state = UC_WAKE_AND_CHECK;
+  }
+  //uc_state = UC_GO_SLEEP;// nowe - przemyslec!
+}
+
+void Nadajnik::handleButtonPressedWhileActive(){
+  if(currentTime - btn_isr_pressed_time >= SWITCH_TIMEOUT)
+  {
+    // spij
+    isInLongsleep = true;
+    goToLongsleep = true;
+
+    for(int i=192; i>0; i--)
+    {
+      analogWrite(LED_PIN, i);
+      delay(10);
+    }
+    digitalWriteFast(LED_PIN,LOW);
+    analogWrite(LED_PIN, 0);
+    uc_state = UC_GO_SLEEP;
+  }
+  else if(buttonLastState != buttonState){
+    detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
+    whistleData.command = ETimerStop;
+    SendRFData();
+    // uc_state = UC_WAKE_AND_CHECK;
+  }
+}
+
+void Nadajnik::handleButtonReleased(){
+  
+}
+void Nadajnik::handleButtonIdle(){
+
+    // jesli przycisk nie jest wcisniety lub zostal zwolniony
+  if(buttonState == LOW)
+  {
+    btn_isr_pressed_time = currentTime;  // ustaw obecny czas
+    start_click_addr = currentTime;  // zeruj start timer dla zmiany adresu
+    // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
+  }
+
+  // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
+  if(buttonState == LOW && isInLongsleep == true)
+  {
+    isInLongsleep = true;
+    goToLongsleep = true;
+    uc_state = UC_GO_SLEEP;
+  }
+
+  // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
+  if(buttonState == LOW && goToLongsleep  == false)
+  {
+    btn_isr_pressed_time = currentTime; // to wlasciwie mozna usunac na rzecz tego na gorze?
+    // i od razu w krotka kime
+    uc_state = UC_GO_SLEEP;
+  }
+  
+}
+void Nadajnik::handleButtonClicks(){
+  if(currentTime - last_rst_click >= SW_RST_TIMEOUT)
+  {
+    buttonClickCount = 0;
+    last_rst_click = currentTime;
+  }
+  if(buttonState == HIGH)         // jezeli jest wysoki
+  {
+    buttonClickCount++;          // licznik klikniec ++
+    last_rst_click = currentTime;  // zeruj timeout
+    start_click_addr = currentTime;  // ustaw start klikniecia do zmiany adresu
+  }
+  if(buttonClickCount >= SW_RST_COUNT)
+  {
+    performReset();
+  }
+}
+
 /*********************************************************************
  * Obsluga przycisku i jego akcji
  * *******************************************************************/
 void Nadajnik::manageButton(){
 
-      buttonLastState = buttonState;                // do rst
-      buttonState = digitalReadFast(BUTTON_PIN);    // odczyt stanu guzika
-      
-      currentTime = millis();
-      
-      if(buttonState != buttonLastState) // jezeli stan przycisku sie zmienil
-      {
-        if(currentTime - last_rst_click >= SW_RST_TIMEOUT)
-        {
-          buttonClickCount = 0;
-          last_rst_click = currentTime;
-        }
-        if(buttonState == HIGH)         // jezeli jest wysoki
-        {
-          buttonClickCount++;          // licznik klikniec ++
-          last_rst_click = currentTime;  // zeruj timeout
-          start_click_addr = currentTime;  // ustaw start klikniecia do zmiany adresu
-        }
-        if(buttonClickCount >= SW_RST_COUNT)
-        {
-          for(int i=0; i<12; i++)
-          {
-            digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-            delay(100);
-          }
-          resetFunc(); //call reset
-        }
-      }
+    currentTime = millis();
+    updateButtonState();
 
-      // jesli przycisk nie jest wcisniety lub zostal zwolniony
-      if(buttonState == LOW)
-      {
-        btn_pressed_time = currentTime;  // ustaw obecny czas
-        start_click_addr = currentTime;  // zeruj start timer dla zmiany adresu
-        // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
-      }
+    
+    if(buttonStateChanged()){
 
-      // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
-      if(buttonState == LOW && isInLongsleep == true)
-      {
-        isInLongsleep = true;
-        goToLongsleep = true;
-        uc_state = UC_GO_SLEEP;
-      }
+      handleButtonClicks();
 
-      // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
-      if(buttonState == HIGH && isInLongsleep == true) // jesli guzik + nadajnik off
-      {
-        if(currentTime - btn_pressed_time >= SWITCH_TIMEOUT)
-        {
-          // pobudka
-          // po dlugim snie moze przy checktimeout wpasc znow w deepsleep dlatego gwizdStartTime = teraz
-          gwizdStartTime = millis(); 
-          btn_pressed_time = millis();
-          this->powerOnBlink();
-          isInLongsleep = false;
 
-          detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
-          uc_state = UC_WAKE_AND_CHECK;
-        }
-        //uc_state = UC_GO_SLEEP;// nowe - przemyslec!
-      }
 
-      // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
-      else if(buttonState == true && isInLongsleep == false) // guzik + nadajnik ON
-      {
-        if(currentTime - btn_pressed_time >= SWITCH_TIMEOUT)
-        {
-          // spij
-          isInLongsleep = true;
-          goToLongsleep = true;
+      if(buttonState == LOW){
+        handleButtonReleased();
+      }
+      if(buttonState == HIGH){
+        handleButtonPressed();
+      }
+    }
+    
+    if(!buttonStateChanged()){
+      if(buttonState == LOW){
+        handleButtonIdle();
+      }
+      if(buttonState == HIGH){
+        handleButtonPressed();
+      }
+    }
 
-          for(int i=192; i>0; i--)
-          {
-            analogWrite(LED_PIN, i);
-            delay(10);
-          }
-          digitalWriteFast(LED_PIN,LOW);
-          analogWrite(LED_PIN, 0);
-          uc_state = UC_GO_SLEEP;
-        }
-        else if(buttonLastState != buttonState){
-          detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
-          whistleData.command = ETimerStop;
-          SendRFData();
-          // uc_state = UC_WAKE_AND_CHECK;
-        }
-      }
-      else
-      {
-        // yyyyy...
-      }
 
-      // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
-      if(buttonState == LOW && goToLongsleep  == false)
-      {
-        btn_pressed_time = currentTime; // to wlasciwie mozna usunac na rzecz tego na gorze?
-        // i od razu w krotka kime
-        uc_state = UC_GO_SLEEP;
-      }
+
+
+
+      // if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
+      // {
+      //   if(buttonState == LOW)
+      //   {
+      //     // funkcja parowania z odbiornikiem!
+      //     if(pickedAddress < 7) { pickedAddress++; }
+      //     else { pickedAddress = 0; }
+
+      //     radio.openWritingPipe(addressList[ pickedAddress ]);
+      //     EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
+
+      //     for (int i = 0; i < ((pickedAddress+1)*2); i++)
+      //     {
+      //       digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+      //       delay(200);
+      //     }
+      //     start_click_addr = currentTime = millis();
+      //   }
+      // }
+
+
+
 }
 
 void Nadajnik::powerOnBlink()
