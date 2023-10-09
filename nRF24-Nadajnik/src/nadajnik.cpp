@@ -298,11 +298,11 @@ void Nadajnik::performReset() {
 }
 
 void Nadajnik::handleButtonPressed(){
-  if(buttonState == HIGH && isInLongsleep == true)    // jesli przycisk wcisniety gdy urzadzenie bylo wylaczone:
+  if(isInLongsleep == true)    // gdy urzadzenie bylo wylaczone:
   {
     handleButtonPressedWhileInactive();
   }
-  else if(buttonState == true && isInLongsleep == false)  // jesli przycisk wcisniety a urzadzenie pracuje normalnie:
+  else if(isInLongsleep == false)  // urzadzenie pracuje normalnie:
   {
     handleButtonPressedWhileActive();
   }
@@ -338,31 +338,48 @@ void Nadajnik::handleButtonPressedWhileActive(){
     }
     digitalWriteFast(LED_PIN,LOW);
     analogWrite(LED_PIN, 0);
+
     uc_state = UC_GO_SLEEP;
   }
   else if(buttonLastState != buttonState){
-    detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
-    whistleData.command = ETimerStop;
-    SendRFData();
-    // uc_state = UC_WAKE_AND_CHECK;
+    // detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
+    // whistleData.command = ETimerStop;
+    // SendRFData();
+    // // uc_state = UC_WAKE_AND_CHECK;
   }
+
+
 }
 
 void Nadajnik::handleButtonReleased(){
-  
-}
-void Nadajnik::handleButtonIdle(){
-
-    // jesli przycisk nie jest wcisniety lub zostal zwolniony
-  if(buttonState == LOW)
+  if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
   {
-    btn_isr_pressed_time = currentTime;  // ustaw obecny czas
-    start_click_addr = currentTime;  // zeruj start timer dla zmiany adresu
-    // jesli przycisk zostanie nacisniety ostatnia wartość stad nie bedzie nadpisywana
+    if(pickedAddress < 7) { pickedAddress++; }
+    else { pickedAddress = 0; }
+
+    radio.openWritingPipe(addressList[ pickedAddress ]);
+    EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
+
+    for (int i = 0; i < ((pickedAddress+1)*2); i++)
+    {
+      digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+      delay(200);
+    }
+    start_click_addr = currentTime = millis();
+  } else {
+    whistleData.command = ETimerStop;
+    SendRFData();
   }
 
+
+}
+
+void Nadajnik::handleButtonIdle(){
+  btn_isr_pressed_time = currentTime;
+  start_click_addr = currentTime;       // zeruj start timer dla zmiany adresu
+
   // jesli sie obudzi po przerwaniu a przycisk juz nie jest wcisniety -> deepsleep
-  if(buttonState == LOW && isInLongsleep == true)
+  if(isInLongsleep == true)
   {
     isInLongsleep = true;
     goToLongsleep = true;
@@ -370,14 +387,13 @@ void Nadajnik::handleButtonIdle(){
   }
 
   // jesli przycisk nie jest wcisniety gdy urzadzenie pracuje -> loop
-  if(buttonState == LOW && goToLongsleep  == false)
+  if(goToLongsleep  == false)
   {
-    btn_isr_pressed_time = currentTime; // to wlasciwie mozna usunac na rzecz tego na gorze?
-    // i od razu w krotka kime
     uc_state = UC_GO_SLEEP;
   }
   
 }
+
 void Nadajnik::handleButtonClicks(){
   if(currentTime - last_rst_click >= SW_RST_TIMEOUT)
   {
@@ -404,12 +420,8 @@ void Nadajnik::manageButton(){
     currentTime = millis();
     updateButtonState();
 
-    
     if(buttonStateChanged()){
-
       handleButtonClicks();
-
-
 
       if(buttonState == LOW){
         handleButtonReleased();
@@ -427,33 +439,6 @@ void Nadajnik::manageButton(){
         handleButtonPressed();
       }
     }
-
-
-
-
-
-      // if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
-      // {
-      //   if(buttonState == LOW)
-      //   {
-      //     // funkcja parowania z odbiornikiem!
-      //     if(pickedAddress < 7) { pickedAddress++; }
-      //     else { pickedAddress = 0; }
-
-      //     radio.openWritingPipe(addressList[ pickedAddress ]);
-      //     EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
-
-      //     for (int i = 0; i < ((pickedAddress+1)*2); i++)
-      //     {
-      //       digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-      //       delay(200);
-      //     }
-      //     start_click_addr = currentTime = millis();
-      //   }
-      // }
-
-
-
 }
 
 void Nadajnik::powerOnBlink()

@@ -98,10 +98,10 @@ void loop() {
   {
     case nadajnik.UC_GO_SLEEP:
     {
-      if (nadajnik.getGoToLongsleep() == true)  // dluga kima
+      if (nadajnik.getGoToLongsleep())
       {
-        nadajnik.prepareToSleep(); // wylacza zbedne peryferia na czas snu
-        attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), isr_button, RISING); // przerwanie sw
+        nadajnik.prepareToSleep();
+        attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), isr_button, RISING);
         LowPower.powerDown(SLEEP_FOREVER,ADC_OFF,BOD_OFF);
         // here sleeping ->
         nadajnik.wakeUp();
@@ -109,11 +109,11 @@ void loop() {
       }
       else    // krotka kima
       {
-        nadajnik.prepareToSleep(); // wylacza zbedne peryferia na czas snu
+        nadajnik.prepareToSleep();
         LowPower.powerDown(nadajnik.getSleepTime(), ADC_OFF, BOD_OFF);
         nadajnik.wakeUp();
 
-        nadajnik.uc_state = nadajnik.UC_WAKE_AND_CHECK; // pokimal to sprawdzic co sie dzieje->
+        nadajnik.uc_state = nadajnik.UC_WAKE_AND_CHECK;
       }
       break;
     }
@@ -146,7 +146,7 @@ void loop() {
     }
     case nadajnik.UC_BTN_CHECK:
     {
-      nadajnik.setGoToLongsleep(false);   // inaczej pojdzie spac long, device_is_off pozostaje dla ustalenia czy nadajnik był wybudzony czy pracowal normalnie
+      nadajnik.setGoToLongsleep(false);   // inaczej pojdzie spac long
       nadajnik.manageButton();
       break;
     }
