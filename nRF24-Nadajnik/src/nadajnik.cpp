@@ -317,6 +317,7 @@ void Nadajnik::handleButtonPressedWhileInactive(){
     btn_isr_pressed_time = millis();
     this->powerOnBlink();
     isInLongsleep = false;
+    wakedUpFreshly = true;
 
     detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
     uc_state = UC_WAKE_AND_CHECK;
@@ -347,7 +348,7 @@ void Nadajnik::handleButtonPressedWhileActive(){
     // SendRFData();
     // // uc_state = UC_WAKE_AND_CHECK;
   }
-
+  detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
 
 }
 
@@ -366,11 +367,18 @@ void Nadajnik::handleButtonReleased(){
       delay(200);
     }
     start_click_addr = currentTime = millis();
-  } else {
+  }
+  else if(wakedUpFreshly){
+    wakedUpFreshly = false;
+  }
+  else if(!wakedUpFreshly)
+  {
+    detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
+    uint8_t previusCommand = whistleData.command;
     whistleData.command = ETimerStop;
     SendRFData();
+    whistleData.command = previusCommand;
   }
-
 
 }
 

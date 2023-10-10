@@ -106,6 +106,7 @@ void loop() {
         // here sleeping ->
         nadajnik.wakeUp();
         nadajnik.setBmeTableNeedsInitialization(true);
+        detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
       }
       else    // krotka kima
       {
@@ -141,7 +142,9 @@ void loop() {
             nadajnik.setSendSignal(false);
           }
         }
-        nadajnik.uc_state = nadajnik.UC_BTN_CHECK;
+        if(!nadajnik.getSendSignalState()){
+          nadajnik.uc_state = nadajnik.UC_BTN_CHECK;
+        }
       break;
     }
     case nadajnik.UC_BTN_CHECK:

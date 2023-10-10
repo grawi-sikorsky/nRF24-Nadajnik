@@ -39,6 +39,7 @@ class Nadajnik{
 
         bool isInLongsleep = false;         // device is in longsleep flag
         bool goToLongsleep = false;         // sets device to go to longsleep in nex loop
+        bool wakedUpFreshly = false;
 
         enum EWhistleCommands{
             ELightsOn,
