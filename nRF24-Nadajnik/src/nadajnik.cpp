@@ -21,7 +21,8 @@ void Nadajnik::init(){
     bme.beginSPI(10);
 
     radio.begin();
-    radio.openWritingPipe(addressList[pickedAddress]);
+    // radio.openWritingPipe(addressList[pickedAddress]);
+    radio.openWritingPipe(addressList[0]);
     //radio.enableAckPayload();
     radio.setRetries(1,8); // delay, count
     radio.setDataRate(RF24_250KBPS);
@@ -355,18 +356,18 @@ void Nadajnik::handleButtonPressedWhileActive(){
 void Nadajnik::handleButtonReleased(){
   if(currentTime - start_click_addr >= 850 && currentTime - start_click_addr <= 2400)
   {
-    if(pickedAddress < 7) { pickedAddress++; }
-    else { pickedAddress = 0; }
+    // if(pickedAddress < 7) { pickedAddress++; }
+    // else { pickedAddress = 0; }
 
-    radio.openWritingPipe(addressList[ pickedAddress ]);
-    EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
+    // radio.openWritingPipe(addressList[ pickedAddress ]);
+    // EEPROM.update(EEPROM_ADDRESS_PLACE, pickedAddress);
 
-    for (int i = 0; i < ((pickedAddress+1)*2); i++)
-    {
-      digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
-      delay(200);
-    }
-    start_click_addr = currentTime = millis();
+    // for (int i = 0; i < ((pickedAddress+1)*2); i++)
+    // {
+    //   digitalWriteFast(LED_PIN, !digitalReadFast(LED_PIN));
+    //   delay(200);
+    // }
+    // start_click_addr = currentTime = millis();
   }
   else if(wakedUpFreshly){
     wakedUpFreshly = false;
@@ -376,7 +377,11 @@ void Nadajnik::handleButtonReleased(){
     detachInterrupt(digitalPinToInterrupt(BUTTON_PIN));
     uint8_t previusCommand = whistleData.command;
     whistleData.command = ETimerStop;
-    SendRFData();
+    for(int i = 0; i < 6; ++i){
+      SendRFData();
+      delay(10);
+    }
+    
     whistleData.command = previusCommand;
   }
 
@@ -412,7 +417,7 @@ void Nadajnik::handleButtonClicks(){
   {
     buttonClickCount++;          // licznik klikniec ++
     last_rst_click = currentTime;  // zeruj timeout
-    start_click_addr = currentTime;  // ustaw start klikniecia do zmiany adresu
+    // start_click_addr = currentTime;  // ustaw start klikniecia do zmiany adresu
   }
   if(buttonClickCount >= SW_RST_COUNT)
   {
