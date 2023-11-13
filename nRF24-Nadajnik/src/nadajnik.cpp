@@ -379,7 +379,7 @@ void Nadajnik::handleButtonReleased(){
     whistleData.command = ETimerStop;
     for(int i = 0; i < 6; ++i){
       SendRFData();
-      delay(10);
+      delay(8);
     }
     
     whistleData.command = previusCommand;
