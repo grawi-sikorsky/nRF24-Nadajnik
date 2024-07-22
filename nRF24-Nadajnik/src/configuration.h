@@ -12,8 +12,8 @@
 #define SW_RST_TIMEOUT  260          // maksymalny interwał w ktorym należy wykonac klikniecia dla RST
 #define SW_RST_COUNT    5             // ilosc nacisniec do wykonania resetu
 #define TIME_TO_WAIT_MS 5            // czas do nastepnego wyzwolenia????
-#define TIMEOUT_1       72000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
-#define TIMEOUT_2       144000//144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
+#define TIMEOUT_1       144000// 72000       // pierwszy timeiut // realnie wychodzi jakies (1 800 000 ms = 30 min) / 25 = 72000
+#define TIMEOUT_2       288000//144000       // drugi prog = 5 400 000 = 90 min // z uwagi na sleep-millis: 60 min
 // #define TIMEOUT_1       2400// 72000       // up debug approx 1 min
 // #define TIMEOUT_2       4800//144000       // up debug apprix 2 min
 
